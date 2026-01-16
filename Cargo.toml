@@ -7,3 +7,4 @@ license = "MIT AND Apache-2.0"
 description = "Linux Validation Framework"
 
 [dependencies]
+anyhow = "1"
