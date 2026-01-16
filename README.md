@@ -1,10 +1,17 @@
 # tux-validation
 
-A unit test framework for Embedded Linux.
+System validation framework for Embedded Linux.
 
 
 ## Running
 
+### Build examples
+Run e.g.
+```
+cargo build --example os_release_check
+```
+
+### Runt unit tests
 ```
 $ cargo test
 ```
