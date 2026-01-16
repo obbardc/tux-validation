@@ -1,0 +1,9 @@
+[package]
+name = "tux-validation"
+version = "0.1.0"
+edition = "2024"
+authors = ["Christopher Obbard <christopher.obbard@linaro.org>"]
+license = "MIT AND Apache-2.0"
+description = "Linux Validation Framework"
+
+[dependencies]
