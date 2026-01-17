@@ -34,13 +34,15 @@ jobs:
       - name: Run Linting (Clippy)
         run: cargo clippy -- -D warnings
 
-      - name: Build & Run Tests (Native x86_64)
-        # This runs your tests on the runner itself to make sure logic is sound
+      - name: Build & Run Tests (x86_64)
         run: cargo test --verbose
 
-      - name: Build for ARM64
-        # This ensures the code compiles for your dev board
-        # We use --all-targets to include tests and examples
+      - name: Build & Run example (x86_64)
+        run: |
+          cargo build --example os_release_check
+          ./target/debug/examples/os_release_check --id Ubuntu --codename noble
+
+      - name: Cross-compile all (ARM64)
         run: cargo build --target aarch64-unknown-linux-gnu --all-targets --verbose
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
