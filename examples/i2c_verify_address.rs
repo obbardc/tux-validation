@@ -22,7 +22,9 @@ fn parse_hex(s: &str) -> Result<u16, String> {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let scanner = LinuxI2cScanner { bus_id: args.bus_id };
+    let scanner = LinuxI2cScanner {
+        bus_id: args.bus_id,
+    };
 
     println!("Checking I2C Bus {}...", args.bus_id.to_string());
     let report = validate_bus(&scanner, &args.addresses)?;
@@ -30,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     for addr in &report.present {
         println!("Found expected device at 0x{:02x}", addr);
     }
-    
+
     for addr in &report.missing {
         println!("FAILED: Expected device at 0x{:02x} not found!", addr);
     }
