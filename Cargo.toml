@@ -10,3 +10,4 @@ description = "Linux Validation Framework"
 anyhow = "1"
 clap = { version = "4.4", features = ["derive"] } # Added for CLI args
 i2cdev = "0.6"
+nix = "0.26.4"
