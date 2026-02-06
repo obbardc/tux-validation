@@ -5,7 +5,9 @@ use nix::errno::Errno;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Finds all available i2c character devices in /dev
+/// Finds all available i2c devices in /dev.
+/// 
+/// Returns the list of found devices.
 pub fn discover_buses() -> Result<Vec<PathBuf>> {
     let mut buses = Vec::new();
     for entry in fs::read_dir("/dev")? {
@@ -17,8 +19,14 @@ pub fn discover_buses() -> Result<Vec<PathBuf>> {
             buses.push(path);
         }
     }
-    // Sort them so they appear as i2c-0, i2c-1...
-    buses.sort();
+    // Sort them so they appear as i2c-0, i2c-1, i2c-2, .. i2c-10, ..
+    buses.sort_by_key(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|s| s.strip_prefix("i2c-"))
+            .and_then(|x| x.parse::<u8>().ok())
+            .unwrap_or(0)
+    });
     Ok(buses)
 }
 
@@ -27,11 +35,16 @@ pub trait I2cScanner {
     fn scan_sysfs(&self) -> Result<Vec<u16>>; // TODO: add address range as parameter
 }
 
+/// A specific I2C bus scanner.
 pub struct LinuxI2cScanner {
     pub bus_id: u8,
 }
 
 impl I2cScanner for LinuxI2cScanner {
+    /// Scans a given I2C bus ID via hardware probe (smbus_write_quick). 
+    /// 
+    /// Might potentially be disruptive for the bus.
+    /// TODO: add some kind of safety check?
     fn scan_hw_probe(&self) -> Result<(Vec<u16>, Vec<u16>)> {
         let mut unbound = Vec::new();
         let mut bound = Vec::new();
@@ -70,6 +83,7 @@ impl I2cScanner for LinuxI2cScanner {
         Ok((unbound, bound))
     }
 
+    /// Scans /sys/bus/i2c-xxx for kernel-recognised devices. 
     fn scan_sysfs(&self) -> Result<Vec<u16>> {
         let mut detected = Vec::new();
 
@@ -83,6 +97,7 @@ impl I2cScanner for LinuxI2cScanner {
     }
 }
 
+/// Holds results of an I2C bus scan for specific addresses.
 pub struct I2cValidationResult {
     pub missing: Vec<u16>,
     pub unexpected: Vec<u16>,
@@ -90,6 +105,7 @@ pub struct I2cValidationResult {
     pub probed: Vec<u16>,
 }
 
+/// Scan an I2C bus and check for specific device addresses.
 pub fn validate_bus(
     scanner: &impl I2cScanner,
     expected_addresses: &[u16],
@@ -141,6 +157,7 @@ pub fn validate_bus(
     Ok(result)
 }
 
+/// Holds results of an I2C bus full scan (both hw probe and sysfs).
 pub struct I2cBusReport {
     pub bus_path: String,
     pub kernel_detected: Vec<u16>,  // From /sys
@@ -148,6 +165,7 @@ pub struct I2cBusReport {
     pub hardware_bound: Vec<u16>,   // From smbus_write_quick - bound to a driver
 }
 
+/// Returns either `name` or entry from `uevent` of a particular I2C device.
 pub fn get_device_info(bus_id: u32, addr: u16) -> String {
     let base_path = format!("/sys/bus/i2c/devices/{}-{:04x}", bus_id, addr);
     let name_path = format!("{}/name", base_path);
@@ -167,7 +185,7 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
                     .nth(1)
                     .unwrap_or("Unknown")
                     .split(',')
-                    .last() // Get 'rk808' from 'rockchip,rk808'
+                    .last() // e.g. get 'rk808' from 'rockchip,rk808'
                     .unwrap_or("Unknown")
                     .to_string();
             }
@@ -177,6 +195,9 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
     "Unidentified".to_string()
 }
 
+/// Performs full scan of I2C subsystem for the full range of addresses.
+/// 
+/// Both harware probe (via smbus_quick_write) and sysfs scan are performed.
 pub fn full_system_scan() -> Result<Vec<I2cBusReport>> {
     let busses = discover_buses()?;
     let mut reports = Vec::new();
