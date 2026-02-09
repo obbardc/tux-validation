@@ -157,7 +157,7 @@ pub fn validate_bus(
     Ok(result)
 }
 
-/// Holds results of an I2C bus full scan (both hw probe and sysfs).
+/// Holds results of the I2C subsystem full scan (both hw probe and sysfs).
 pub struct I2cBusReport {
     pub bus_path: String,
     pub kernel_detected: Vec<u16>,  // From /sys
@@ -197,8 +197,8 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
 
 /// Performs full scan of I2C subsystem for the full range of addresses.
 /// 
-/// Both harware probe (via smbus_quick_write) and sysfs scan are performed.
-pub fn full_system_scan() -> Result<Vec<I2cBusReport>> {
+/// Both sysfs scan and harware probes (optional, via smbus_quick_write) are performed.
+pub fn full_system_scan(enable_hw_probe: bool) -> Result<Vec<I2cBusReport>> {
     let busses = discover_buses()?;
     let mut reports = Vec::new();
 
@@ -210,8 +210,12 @@ pub fn full_system_scan() -> Result<Vec<I2cBusReport>> {
             .expect("invalid bus string");
         let scanner = LinuxI2cScanner { bus_id: bus_id };
 
-        // 1. Live Hardware Probe
-        let (hw_unbound, hw_bound) = scanner.scan_hw_probe()?;
+        // 1. Live Hardware Probe - not super Rust-idiomatic but will do
+        let (hw_unbound, hw_bound) = if enable_hw_probe {
+            scanner.scan_hw_probe()?
+        } else {
+            (Vec::new(), Vec::new())
+        };
 
         // 2. Sysfs check
         let knl_detected = scanner.scan_sysfs()?;
