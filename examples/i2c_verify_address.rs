@@ -4,12 +4,17 @@ use tux_validation::i2c::{LinuxI2cScanner, validate_bus};
 #[derive(Parser)]
 #[command(author, version, about = "Verifies I2C device addresses")]
 struct Args {
+
+    /// Perform hardware probe (smbus_quick_write)
+    #[arg(long)]
+    hw_probe: bool,
+    
     /// I2C BUS ID (e.g., 0)
     #[arg(short, long)]
     bus_id: u8,
 
     /// One or more device addresses (e.g., 0x1b 0x50)
-    #[arg(short, long, value_parser = parse_hex, num_args = 1..)]
+    #[arg(value_parser = parse_hex, num_args = 1..)]
     addresses: Vec<u16>,
 }
 
@@ -27,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     println!("Checking I2C Bus {}...", args.bus_id.to_string());
-    let report = validate_bus(&scanner, &args.addresses)?;
+    let report = validate_bus(&scanner, &args.addresses, args.hw_probe)?;
 
     for addr in &report.present {
         println!("Found expected device at 0x{:02x}", addr);

@@ -109,8 +109,13 @@ pub struct I2cValidationResult {
 pub fn validate_bus(
     scanner: &impl I2cScanner,
     expected_addresses: &[u16],
+    enable_hw_probe: bool
 ) -> Result<I2cValidationResult> {
-    let (hw_unbound, hw_bound) = scanner.scan_hw_probe()?;
+    let (hw_unbound, hw_bound) = if enable_hw_probe {
+        scanner.scan_hw_probe()?
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let detected_sysfs = scanner.scan_sysfs()?;
 
     let mut result = I2cValidationResult {
