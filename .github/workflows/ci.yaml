@@ -39,7 +39,7 @@ jobs:
 
       - name: Build & Run example (x86_64)
         run: |
-          cargo build --example os_release_check
+          cargo build --examples
           ./target/debug/examples/os_release_check --id Ubuntu --codename noble
 
       - name: Cross-compile all (ARM64)
