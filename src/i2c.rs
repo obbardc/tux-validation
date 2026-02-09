@@ -126,10 +126,7 @@ pub fn validate_bus(
     };
 
     for &addr in expected_addresses {
-        if hw_unbound.contains(&addr) {
-            result.present.push(addr);
-            result.probed.push(addr);
-        } else if hw_bound.contains(&addr) {
+        if hw_unbound.contains(&addr) || hw_bound.contains(&addr) {
             result.present.push(addr);
             result.probed.push(addr);
         } else if detected_sysfs.contains(&addr) {
@@ -190,7 +187,7 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
                     .nth(1)
                     .unwrap_or("Unknown")
                     .split(',')
-                    .last() // e.g. get 'rk808' from 'rockchip,rk808'
+                    .next_back() // e.g. get 'rk808' from 'rockchip,rk808'
                     .unwrap_or("Unknown")
                     .to_string();
             }
@@ -213,7 +210,7 @@ pub fn full_system_scan(enable_hw_probe: bool) -> Result<Vec<I2cBusReport>> {
             .strip_prefix("/dev/i2c-")
             .and_then(|x| x.parse::<u8>().ok())
             .expect("invalid bus string");
-        let scanner = LinuxI2cScanner { bus_id: bus_id };
+        let scanner = LinuxI2cScanner { bus_id };
 
         // 1. Live Hardware Probe - not super Rust-idiomatic but will do
         let (hw_unbound, hw_bound) = if enable_hw_probe {
