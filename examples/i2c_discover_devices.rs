@@ -1,5 +1,5 @@
 use clap::Parser;
-use tux_validation::i2c::full_system_scan;
+use tux_validation::i2c::{find_i2c_slaves_with_udev, full_system_scan};
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs full I2C subsystem scan.")]
@@ -11,6 +11,9 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+
+    find_i2c_slaves_with_udev()?;
+
     println!(
         "{:<12} | {:<20} | {:<20}",
         "Bus", "Kernel Detected", "Responding Addresses"

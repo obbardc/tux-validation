@@ -2,6 +2,7 @@ use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use nix::errno::Errno;
+use udev::Enumerator;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -230,4 +231,55 @@ pub fn full_system_scan(enable_hw_probe: bool) -> Result<Vec<I2cBusReport>> {
         });
     }
     Ok(reports)
+}
+
+pub fn find_i2c_slaves_with_udev() -> Result<()> {
+    let mut enumerator = Enumerator::new()?;
+
+    // We filter for the "i2c" subsystem to avoid seeing USB, PCI, etc.
+    enumerator.match_subsystem("i2c")?;
+
+    println!("{:<10} | {:<10} | {:<15} | {:<15}", "Bus", "Address", "Name", "Driver");
+    println!("{:-<60}", "");
+
+    for device in enumerator.scan_devices()? {
+
+        println!();
+        println!("{:#?}", device);
+
+        println!("  [properties]");
+        for property in device.properties() {
+            println!("    - {:?} {:?}", property.name(), property.value());
+        }
+
+        println!("  [attributes]");
+        for attribute in device.attributes() {
+            println!("    - {:?} {:?}", attribute.name(), attribute.value());
+        }
+
+        // I2C clients usually have a sysname like "0-001b"
+        let sysname = device.sysname().to_string_lossy();
+        
+        // We only care about slave devices (which contain a hyphen), 
+        // not the master adapters (which are just "i2c-0")
+        if sysname.contains('-') {
+            let parts: Vec<&str> = sysname.split('-').collect();
+            let bus = parts[0];
+            let addr = parts[1]; // usually in the form "001b"
+
+            // udev makes getting the driver name trivial
+            let driver = device.driver()
+                .map(|d| d.to_string_lossy().to_string())
+                .unwrap_or_else(|| "none".to_string());
+
+            // You can also get "attributes" (like the 'name' file we read earlier)
+            let name = device.attribute_value("name")
+                .map(|v| v.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+
+            println!("{:<10} | {:<10} | {:<15} | {:<15}", bus, addr, name, driver);
+        }
+    }
+
+    Ok(())
 }
