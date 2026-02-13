@@ -10,20 +10,46 @@ pub struct DeviceStatus {
     pub driver_bound: Option<String>, // Some("rk808") or None
 }
 
-/// Specific details for different hardware buses
 #[derive(Debug, Clone, Serialize)]
-pub enum DeviceKind {
-    I2c { bus: u8, address: u16 },
-    Usb { port: u32, vendor_id: u16, product_id: u16 },
+pub enum DeviceAddress {
+    I2c { bus: u8, address: u16 }, // e.g. {7, 0x000a}
+    Usb { port: String }, // e.g. "1-1.2"
+    Pci { slot: String }, // e.g. "00:02.0"
 }
 
 /// Device class
 #[derive(Debug, Clone, Serialize)]
 pub struct TuxDevice {
     pub name: String,
-    pub kind: DeviceKind,
+    pub address: DeviceAddress,
     pub status: DeviceStatus,
     pub attributes: HashMap<String, String>, // Extra optional info
+}
+
+#[derive(Debug, Serialize)]
+pub enum Subsystem {
+    I2c,
+    Usb,
+    Pci,
+    Gpio,
+}
+
+///TODO: Does it make sense?
+#[derive(Debug, Serialize)]
+pub enum BusStatus {
+    Active,
+    Inactive,
+    Missing
+}
+
+/// Hardware group (bus/controller/adaptor) class
+pub struct TuxBus {
+    pub name: String,           // e.g., "i2c-7"
+    pub subsystem: Subsystem,   // Enum: I2c, Usb, Pci
+    pub id: String,             // e.g. 7 as in i2c-7
+    pub devices: Vec<TuxDevice>,
+    pub status: BusStatus,      // Is the controller itself healthy?
+    pub metadata: HashMap<String, String>   // For various metadata
 }
 
 impl TuxDevice {
@@ -33,11 +59,11 @@ impl TuxDevice {
         let parent = dev.parent().expect("No parent!");
         let parent_sysname = parent.sysname().to_str().unwrap_or("");
         let parent_name_parts:Vec<&str> = parent_sysname.split('-').collect();
-        let kind = if parent_name_parts[0] == "i2c" {
+        let address = if parent_name_parts[0] == "i2c" {
             let dev_name_parts:Vec<&str> = dev.sysname().to_str().unwrap_or("").split('-').collect();
             let bus = dev_name_parts[0].parse().ok()?;
             let addr = u16::from_str_radix(dev_name_parts[1], 16).ok()?;
-            DeviceKind::I2c { bus: bus, address: addr }
+            DeviceAddress::I2c { bus: bus, address: addr }
         } else {
             return None; // Skip adapters/masters for this list
         };
@@ -47,7 +73,7 @@ impl TuxDevice {
         Some(TuxDevice {
             name: dev.attribute_value("name")
                 .map_or("", |v| {v.to_str().unwrap_or("")}).to_string(),
-            kind,
+            address,
             status: DeviceStatus {
                 in_udev: true,
                 in_sysfs: true, // If udev sees it, sysfs has it?

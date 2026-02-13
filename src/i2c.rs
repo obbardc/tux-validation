@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::device::{TuxDevice, TuxBus};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
