@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use serde::Serialize;
 
 /// Represents the status of a device based on various discovery methods.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct DeviceStatus {
     pub in_udev: bool,
     pub in_sysfs: bool,
@@ -10,14 +11,14 @@ pub struct DeviceStatus {
 }
 
 /// Specific details for different hardware buses
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum DeviceKind {
     I2c { bus: u8, address: u16 },
     Usb { port: u32, vendor_id: u16, product_id: u16 },
 }
 
 /// Device class
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TuxDevice {
     pub name: String,
     pub kind: DeviceKind,
@@ -55,5 +56,12 @@ impl TuxDevice {
             },
             attributes: HashMap::new(),
         })
+    }
+
+    /// Print device details in JSON format
+    pub fn print_json(&self) -> anyhow::Result<()> {
+        let device_json = serde_json::to_string_pretty(self)?;
+        println!("{}", device_json);
+        Ok(())
     }
 }
