@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::device::{TuxDevice, TuxBus};
+use crate::device::{TuxDevice, TuxBus, Subsystem, BusStatus, DeviceAddress, DeviceStatus};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
@@ -287,18 +287,67 @@ pub fn find_i2c_slaves_with_udev() -> Result<()> {
 }
 
 /// Sweeps through udev records for I2C clients and returns a {bus: device} map.
-pub fn get_i2c_udev_map() -> Result<HashMap<String, Vec<udev::Device>>> {
+pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     let mut map = HashMap::new();
     let mut enumerator = udev::Enumerator::new()?;
     enumerator.match_subsystem("i2c")?;
 
     for device in enumerator.scan_devices()? {
         if let Some(parent) = device.parent() {
-            let parent_name = parent.sysname().to_string_lossy().into_owned();
-            if parent_name.starts_with("i2c-") {
-                map.entry(parent_name).or_insert_with(Vec::new).push(device);
+            //let parent_name = parent.sysname().to_string_lossy().into_owned();
+            let parent_name: Vec<&str> = parent.sysname().to_str().unwrap_or("").split('-').collect();
+            if parent_name[0] == "i2c" {
+                let bus_id = parent_name[1].parse::<u8>().expect("Bus ID non-integer!");
+                map.entry(bus_id).or_insert_with(Vec::new).push(device);
             }
         }
     }
     Ok(map)
+}
+
+pub fn audit_all_i2c_buses() -> anyhow::Result<Vec<TuxBus>> {
+    let udev_map = get_i2c_udev_map()?;
+    let mut board_report = Vec::new();
+
+    for (bus_id, devices) in udev_map {
+        let mut bus_node = TuxBus {
+            name: format!("i2c-{}", bus_id),
+            subsystem: Subsystem::I2c,
+            id: bus_id.to_string(),
+            devices: Vec::new(),
+            status: BusStatus::Active,
+            metadata: HashMap::new()
+        };
+
+        // Perform hardware probe
+        let scanner = LinuxI2cScanner{ bus_id };
+        let (unbound_hw, bound_hw) = scanner.scan_hw_probe()?;
+
+        // Cross-reference with udev inventory
+        for dev in devices {
+            let mut t_dev = TuxDevice::from_udev(&dev).expect("Factory from udev::Device failed!");
+            t_dev.status.hw_responding = bound_hw.contains(&t_dev.address.as_i2c_address().unwrap());
+            bus_node.devices.push(t_dev);
+        }
+
+        // Find ghosts (In HW but not in udev)
+        for addr in unbound_hw {
+            if !bus_node.devices.iter().any(|d| d.address.as_i2c_address().unwrap() == addr) {
+                bus_node.devices.push(TuxDevice{
+                    name: String::from("Unknown"),
+                    address: DeviceAddress::I2c { bus: bus_id, address: addr },
+                    status: DeviceStatus {
+                        in_udev: false,
+                        in_sysfs: false,
+                        hw_responding: true,
+                        driver_bound: None
+                    },
+                    attributes: HashMap::new(),
+                });
+            }
+        }
+
+        board_report.push(bus_node);
+    }
+    Ok(board_report)
 }

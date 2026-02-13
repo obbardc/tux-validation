@@ -17,6 +17,17 @@ pub enum DeviceAddress {
     Pci { slot: String }, // e.g. "00:02.0"
 }
 
+impl DeviceAddress {
+    /// Returns the I2C address if this is an I2C device, otherwise None
+    pub fn as_i2c_address(&self) -> Option<u16> {
+        if let Self::I2c { address, .. } = self {
+            Some(*address)
+        } else {
+            None
+        }
+    }
+}
+
 /// Device class
 #[derive(Debug, Clone, Serialize)]
 pub struct TuxDevice {
