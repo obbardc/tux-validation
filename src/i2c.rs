@@ -1,10 +1,11 @@
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use nix::errno::Errno;
 use udev::Enumerator;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 /// Finds all available i2c devices in /dev.
 ///
@@ -282,4 +283,21 @@ pub fn find_i2c_slaves_with_udev() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Sweeps through udev records for I2C clients and returns a {bus: device} map.
+pub fn get_i2c_udev_map() -> Result<HashMap<String, Vec<udev::Device>>> {
+    let mut map = HashMap::new();
+    let mut enumerator = udev::Enumerator::new()?;
+    enumerator.match_subsystem("i2c")?;
+
+    for device in enumerator.scan_devices()? {
+        if let Some(parent) = device.parent() {
+            let parent_name = parent.sysname().to_string_lossy().into_owned();
+            if parent_name.starts_with("i2c-") {
+                map.entry(parent_name).or_insert_with(Vec::new).push(device);
+            }
+        }
+    }
+    Ok(map)
 }
