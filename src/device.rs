@@ -1,20 +1,29 @@
 use std::collections::HashMap;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 /// Represents the status of a device based on various discovery methods.
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct DeviceStatus {
     pub in_udev: bool,
-    pub in_sysfs: bool,
     pub hw_responding: bool,
     pub driver_bound: Option<String>, // Some("rk808") or None
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub enum DeviceAddress {
-    I2c { bus: u8, address: u16 }, // e.g. {7, 0x000a}
+    I2c { 
+        bus: u8,
+        #[serde(serialize_with = "to_hex")]
+        address: u16 // e.g. {7, 0x000a}
+    },
     Usb { port: String }, // e.g. "1-1.2"
     Pci { slot: String }, // e.g. "00:02.0"
+}
+
+/// Custom serializer to turn numbers into 0xYY hex strings
+fn to_hex<S>(value: &u16, serializer: S) -> Result<S::Ok, S::Error>
+where S: Serializer {
+    serializer.serialize_str(&format!("0x{:02x}", value))
 }
 
 impl DeviceAddress {
@@ -79,7 +88,7 @@ impl TuxDevice {
             return None; // Skip adapters/masters for this list
         };
 
-        let driver = dev.driver().map_or("", |s| { s.to_str().unwrap_or("") });
+        let driver = dev.driver().and_then(|s| s.to_str()).map(|s| s.to_string());
         
         Some(TuxDevice {
             name: dev.attribute_value("name")
@@ -87,9 +96,8 @@ impl TuxDevice {
             address,
             status: DeviceStatus {
                 in_udev: true,
-                in_sysfs: true, // If udev sees it, sysfs has it?
                 hw_responding: false, // To be filled by hw_probe
-                driver_bound: Some(driver.to_string())
+                driver_bound: driver
             },
             attributes: HashMap::new(),
         })
