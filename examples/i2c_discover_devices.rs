@@ -1,5 +1,5 @@
 use clap::Parser;
-use tux_validation::i2c::{find_i2c_slaves_with_udev, full_system_scan};
+use tux_validation::i2c::{audit_all_i2c_buses, find_i2c_slaves_with_udev, full_system_scan};
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs full I2C subsystem scan.")]
@@ -12,7 +12,18 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    find_i2c_slaves_with_udev()?;
+    //find_i2c_slaves_with_udev()?;
+
+    let i2c_busses = audit_all_i2c_buses()?;
+
+    for bus in i2c_busses {
+        println!("--- BUS {} ---", bus.id);
+        for dev in bus.devices {
+            dev.print_json()?;
+        }
+    }
+
+    println!("");
 
     println!(
         "{:<12} | {:<20} | {:<20}",
