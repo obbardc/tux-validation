@@ -326,7 +326,7 @@ pub fn audit_all_i2c_buses() -> anyhow::Result<Vec<TuxBus>> {
         // Cross-reference with udev inventory
         for dev in devices {
             let mut t_dev = TuxDevice::from_udev(&dev).expect("Factory from udev::Device failed!");
-            t_dev.status.hw_responding = bound_hw.contains(&t_dev.address.as_i2c_address().unwrap());
+            t_dev.status.hw_responding = bound_hw.contains(&t_dev.address.as_i2c_address().unwrap()) || unbound_hw.contains(&t_dev.address.as_i2c_address().unwrap());
             bus_node.devices.push(t_dev);
         }
 
