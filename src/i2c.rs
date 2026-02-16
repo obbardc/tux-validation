@@ -338,9 +338,8 @@ pub fn audit_all_i2c_buses() -> anyhow::Result<Vec<TuxBus>> {
                     address: DeviceAddress::I2c { bus: bus_id, address: addr },
                     status: DeviceStatus {
                         in_udev: false,
-                        in_sysfs: false,
                         hw_responding: true,
-                        driver_bound: Some(String::from(""))
+                        driver_bound: None
                     },
                     attributes: HashMap::new(),
                 });
