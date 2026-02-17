@@ -281,7 +281,7 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     Ok(map)
 }
 
-pub fn audit_all_i2c_buses() -> anyhow::Result<Vec<TuxBus>> {
+pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>> {
     let udev_map = get_i2c_udev_map()?;
     let mut board_report = Vec::new();
 
@@ -297,7 +297,12 @@ pub fn audit_all_i2c_buses() -> anyhow::Result<Vec<TuxBus>> {
 
         // Perform hardware probe
         let scanner = LinuxI2cScanner{ bus_id };
-        let (unbound_hw, bound_hw) = scanner.scan_hw_probe()?;
+        let (unbound_hw, bound_hw) = if enable_hw_probe {
+            scanner.scan_hw_probe()?
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        //let (unbound_hw, bound_hw) = scanner.scan_hw_probe()?;
 
         // Cross-reference with udev inventory
         for dev in devices {
