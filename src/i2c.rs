@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use crate::device::{TuxDevice, TuxBus, Subsystem, BusStatus, DeviceAddress, DeviceStatus};
+use crate::device::{BusStatus, DeviceAddress, DeviceStatus, Subsystem, TuxBus, TuxDevice};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use nix::errno::Errno;
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use udev::Enumerator;
 
 /// Finds all available i2c devices in /dev.
@@ -243,7 +243,6 @@ pub fn scan_i2c_subsystem_with_udev() -> Result<()> {
     enumerator.match_subsystem("i2c")?;
 
     for device in enumerator.scan_devices()? {
-
         println!();
         println!("{:#?}", device);
 
@@ -256,7 +255,6 @@ pub fn scan_i2c_subsystem_with_udev() -> Result<()> {
         for attribute in device.attributes() {
             println!("    - {:?} {:?}", attribute.name(), attribute.value());
         }
-
     }
 
     Ok(())
@@ -290,7 +288,7 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
 }
 
 /// Performs full audit (scan) of the I2C subsystem via udev and return found device info.
-/// 
+///
 /// Optionally performs hardware probe (via SMBus Write Quick) - this probes the full range
 ///  of possible addresses (so can find "ghost" devices not in udev) but only for the busses
 ///  that already have slave devices in udev.
@@ -305,11 +303,11 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
             id: bus_id.to_string(),
             devices: Vec::new(),
             status: BusStatus::Active,
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         };
 
         // Perform hardware probe
-        let scanner = LinuxI2cScanner{ bus_id };
+        let scanner = LinuxI2cScanner { bus_id };
         let (unbound_hw, bound_hw) = if enable_hw_probe {
             scanner.scan_hw_probe()?
         } else {
@@ -320,7 +318,8 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
         for dev in devices {
             if let Some(mut t_dev) = TuxDevice::from_udev(&dev) {
                 if let Some(addr) = t_dev.address.as_i2c_address() {
-                    t_dev.status.hw_responding = bound_hw.contains(&addr) || unbound_hw.contains(&addr);
+                    t_dev.status.hw_responding =
+                        bound_hw.contains(&addr) || unbound_hw.contains(&addr);
                 }
                 bus_node.devices.push(t_dev);
             }
@@ -328,14 +327,21 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
 
         // Find ghosts (In HW but not in udev)
         for addr in unbound_hw {
-            if !bus_node.devices.iter().any(|d| d.address.as_i2c_address().unwrap() == addr) {
-                bus_node.devices.push(TuxDevice{
+            if !bus_node
+                .devices
+                .iter()
+                .any(|d| d.address.as_i2c_address().unwrap() == addr)
+            {
+                bus_node.devices.push(TuxDevice {
                     name: String::from("Unknown"),
-                    address: DeviceAddress::I2c { bus: bus_id, address: addr },
+                    address: DeviceAddress::I2c {
+                        bus: bus_id,
+                        address: addr,
+                    },
                     status: DeviceStatus {
                         in_udev: false,
                         hw_responding: true,
-                        driver_bound: None
+                        driver_bound: None,
                     },
                     attributes: HashMap::new(),
                 });
