@@ -76,23 +76,38 @@ impl TuxDevice {
     /// Create a device instance from a udev entry
     pub fn from_udev(dev: &udev::Device) -> Option<Self> {
         // Decide if clent device
-        let parent = dev.parent().expect("No parent!");
-        let parent_sysname = parent.sysname().to_str().unwrap_or("");
-        let parent_name_parts:Vec<&str> = parent_sysname.split('-').collect();
-        let address = if parent_name_parts[0] == "i2c" {
-            let dev_name_parts:Vec<&str> = dev.sysname().to_str().unwrap_or("").split('-').collect();
-            let bus = dev_name_parts[0].parse().ok()?;
-            let addr = u16::from_str_radix(dev_name_parts[1], 16).ok()?;
-            DeviceAddress::I2c { bus: bus, address: addr }
+        let parent = dev.parent()?;
+        let parent_sysname = parent.sysname().to_str()?;
+
+        let address = if parent_sysname.starts_with("i2c-") {
+            // --- I2C LOGIC ---
+            let bus = parent_sysname.strip_prefix("i2c-")?.parse::<u8>().ok()?;
+            let dev_sysname = dev.sysname().to_str()?;
+            let addr_str = dev_sysname.split('-').nth(1)?;
+            let addr = match u16::from_str_radix(addr_str, 16) {
+                Ok(val) => val,
+                Err(_) => {
+                //To catch ACPI/non-hex addresses
+                    eprintln!("Skipping I2C device with non-hex address format: '{}' (Bus: {})", dev_sysname, bus);
+                    return None; 
+                }
+            };
+            DeviceAddress::I2c { bus, address: addr }
+        } else if parent_sysname.contains("usb") {
+            // --- FUTURE USB LOGIC ---
+            return None; 
         } else {
-            return None; // Skip adapters/masters for this list
+            return None;
         };
 
         let driver = dev.driver().and_then(|s| s.to_str()).map(|s| s.to_string());
-        
+        let name = dev.attribute_value("name")
+            .and_then(|v| v.to_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
         Some(TuxDevice {
-            name: dev.attribute_value("name")
-                .map_or("", |v| {v.to_str().unwrap_or("")}).to_string(),
+            name,
             address,
             status: DeviceStatus {
                 in_udev: true,
