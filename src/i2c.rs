@@ -318,11 +318,12 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
 
         // Cross-reference with udev inventory
         for dev in devices {
-            let mut t_dev = TuxDevice::from_udev(&dev).expect("Factory from udev::Device failed!");
-            if let Some(addr) = t_dev.address.as_i2c_address() {
-                t_dev.status.hw_responding = bound_hw.contains(&addr) || unbound_hw.contains(&addr);
+            if let Some(mut t_dev) = TuxDevice::from_udev(&dev) {
+                if let Some(addr) = t_dev.address.as_i2c_address() {
+                    t_dev.status.hw_responding = bound_hw.contains(&addr) || unbound_hw.contains(&addr);
+                }
+                bus_node.devices.push(t_dev);
             }
-            bus_node.devices.push(t_dev);
         }
 
         // Find ghosts (In HW but not in udev)
