@@ -109,7 +109,7 @@ pub struct I2cValidationResult {
 }
 
 /// Scan an I2C bus and check for specific device addresses.
-/// 
+///
 /// TODO: Uses scan_sysfs - can now upgrade to use udev
 pub fn validate_bus(
     scanner: &impl I2cScanner,
@@ -173,8 +173,8 @@ pub struct I2cBusReport {
 }
 
 /// Returns either `name` or entry from `uevent` of a particular I2C device.
-/// 
-/// TODO: probably redundant now that we can use udev 
+///
+/// TODO: probably redundant now that we can use udev
 pub fn get_device_info(bus_id: u32, addr: u16) -> String {
     let base_path = format!("/sys/bus/i2c/devices/{}-{:04x}", bus_id, addr);
     let name_path = format!("{}/name", base_path);
