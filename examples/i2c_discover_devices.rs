@@ -29,17 +29,18 @@ fn main() -> anyhow::Result<()> {
         println!("");
     }
 
-    println!("{:-<60}", "");
-    println!("{:<6} | {:<6} | {:<15} | {:<15} | {:<17}", "Bus ID", "Address", "Name", "Driver", "SMBus Write Quick");
-    println!("{:-<60}", "");
+    println!("{:-<74}", "");
+    println!("{:<6} | {:<7} | {:<15} | {:<15} | {:<17}", "Bus ID", "Address", "Name", "Driver", "SMBus Write Quick");
+    println!("{:-<74}", "");
 
     for bus in i2c_busses {
-        print!("{:<6} | {:<53}", bus.id, "");
-        for dev in bus.devices {
-            print!("\n");
-            print!("{:<6} | {:<6} | {:<15} | {:<15} | {:<17}", "", format!("0x{:02x}", dev.address.as_i2c_address().unwrap()), dev.name, dev.status.driver_bound.as_deref().unwrap_or("none"), dev.status.hw_responding);
+        if let Some((first, rest)) = bus.devices.split_first(){
+            println!("{:<6} | {:<7} | {:<15} | {:<15} | {:<17}", bus.id, format!("0x{:02x}", first.address.as_i2c_address().unwrap()), first.name, first.status.driver_bound.as_deref().unwrap_or("none"), first.status.hw_responding);
+            for dev in rest {
+                println!("{:<6} | {:<7} | {:<15} | {:<15} | {:<17}", "", format!("0x{:02x}", dev.address.as_i2c_address().unwrap()), dev.name, dev.status.driver_bound.as_deref().unwrap_or("none"), dev.status.hw_responding);
+            }
+            println!("{:-<74}", "");
         }
-        print!("\n");
     }
 
     //let reports = full_system_scan(args.hw_probe)?;
