@@ -302,12 +302,13 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
         } else {
             (Vec::new(), Vec::new())
         };
-        //let (unbound_hw, bound_hw) = scanner.scan_hw_probe()?;
 
         // Cross-reference with udev inventory
         for dev in devices {
             let mut t_dev = TuxDevice::from_udev(&dev).expect("Factory from udev::Device failed!");
-            t_dev.status.hw_responding = bound_hw.contains(&t_dev.address.as_i2c_address().unwrap()) || unbound_hw.contains(&t_dev.address.as_i2c_address().unwrap());
+            if let Some(addr) = t_dev.address.as_i2c_address() {
+                t_dev.status.hw_responding = bound_hw.contains(&addr) || unbound_hw.contains(&addr);
+            }
             bus_node.devices.push(t_dev);
         }
 
@@ -329,5 +330,8 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
 
         board_report.push(bus_node);
     }
+
+    board_report.sort_by_key(|bus| bus.id.parse::<u8>().unwrap_or(0));
+
     Ok(board_report)
 }
