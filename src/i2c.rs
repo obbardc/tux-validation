@@ -109,6 +109,8 @@ pub struct I2cValidationResult {
 }
 
 /// Scan an I2C bus and check for specific device addresses.
+/// 
+/// TODO: Uses scan_sysfs - can now upgrade to use udev
 pub fn validate_bus(
     scanner: &impl I2cScanner,
     expected_addresses: &[u16],
@@ -171,6 +173,8 @@ pub struct I2cBusReport {
 }
 
 /// Returns either `name` or entry from `uevent` of a particular I2C device.
+/// 
+/// TODO: probably redundant now that we can use udev 
 pub fn get_device_info(bus_id: u32, addr: u16) -> String {
     let base_path = format!("/sys/bus/i2c/devices/{}-{:04x}", bus_id, addr);
     let name_path = format!("{}/name", base_path);
@@ -203,6 +207,7 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
 /// Performs full scan of I2C subsystem for the full range of addresses.
 ///
 /// Both sysfs scan and harware probes (optional, via smbus_quick_write) are performed.
+/// TODO: redundant as we can now use udev?
 pub fn full_system_scan(enable_hw_probe: bool) -> Result<Vec<I2cBusReport>> {
     let busses = discover_buses()?;
     let mut reports = Vec::new();
@@ -290,8 +295,7 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
 /// Performs full audit (scan) of the I2C subsystem via udev and return found device info.
 ///
 /// Optionally performs hardware probe (via SMBus Write Quick) - this probes the full range
-///  of possible addresses (so can find "ghost" devices not in udev) but only for the busses
-///  that already have slave devices in udev.
+///  of possible addresses (so can find "ghost" devices not in udev).
 pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>> {
     let udev_map = get_i2c_udev_map()?;
     let mut board_report = Vec::new();
