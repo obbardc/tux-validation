@@ -273,19 +273,20 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     for device in enumerator.scan_devices()? {
         let name = device.sysname().to_str().unwrap_or("");
         // Add a bus
-        if name.starts_with("i2c-") && name.matches('-').count() == 1 {
-            if let Ok(id) = name[4..].parse::<u8>() {
-                // Initialize the entry so the bus exists in the map
-                map.entry(id).or_insert_with(Vec::new);
-            }
+        if name.starts_with("i2c-")
+            && name.matches('-').count() == 1
+            && let Ok(id) = name[4..].parse::<u8>()
+        {
+            // Initialize the entry so the bus exists in the map
+            map.entry(id).or_insert_with(Vec::new);
         }
         // Add devices
         if let Some(parent) = device.parent() {
             let parent_name = parent.sysname().to_str().unwrap_or("");
-            if let Some(id_str) = parent_name.strip_prefix("i2c-") {
-                if let Ok(bus_id) = id_str.parse::<u8>() {
-                    map.entry(bus_id).or_insert_with(Vec::new).push(device);
-                }
+            if let Some(id_str) = parent_name.strip_prefix("i2c-")
+                && let Ok(bus_id) = id_str.parse::<u8>()
+            {
+                map.entry(bus_id).or_insert_with(Vec::new).push(device);
             }
         }
     }
