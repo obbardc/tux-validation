@@ -1,5 +1,5 @@
 use clap::Parser;
-use tux_validation::i2c::{audit_all_i2c_buses};
+use tux_validation::i2c::audit_all_i2c_buses;
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs full I2C subsystem scan.")]
@@ -30,14 +30,31 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("{:-<80}", "");
-    println!("{:<6} | {:<7} | {:<15} | {:<20} | {:<17}", "Bus ID", "Address", "Name", "Driver", "SMBus Write Quick");
+    println!(
+        "{:<6} | {:<7} | {:<15} | {:<20} | {:<17}",
+        "Bus ID", "Address", "Name", "Driver", "SMBus Write Quick"
+    );
     println!("{:-<80}", "");
 
     for bus in i2c_busses {
-        if let Some((first, rest)) = bus.devices.split_first(){
-            println!("{:<6} | {:<7} | {:<15} | {:<20} | {:<17}", bus.id, format!("0x{:02x}", first.address.as_i2c_address().unwrap()), first.name, first.status.driver_bound.as_deref().unwrap_or("None"), first.status.hw_responding);
+        if let Some((first, rest)) = bus.devices.split_first() {
+            println!(
+                "{:<6} | {:<7} | {:<15} | {:<20} | {:<17}",
+                bus.id,
+                format!("0x{:02x}", first.address.as_i2c_address().unwrap()),
+                first.name,
+                first.status.driver_bound.as_deref().unwrap_or("None"),
+                first.status.hw_responding
+            );
             for dev in rest {
-                println!("{:<6} | {:<7} | {:<15} | {:<20} | {:<17}", "", format!("0x{:02x}", dev.address.as_i2c_address().unwrap()), dev.name, dev.status.driver_bound.as_deref().unwrap_or("None"), dev.status.hw_responding);
+                println!(
+                    "{:<6} | {:<7} | {:<15} | {:<20} | {:<17}",
+                    "",
+                    format!("0x{:02x}", dev.address.as_i2c_address().unwrap()),
+                    dev.name,
+                    dev.status.driver_bound.as_deref().unwrap_or("None"),
+                    dev.status.hw_responding
+                );
             }
             println!("{:-<80}", "");
         }
