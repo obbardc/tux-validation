@@ -267,20 +267,33 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     let mut map = HashMap::new();
     let mut enumerator = udev::Enumerator::new()?;
     enumerator.match_subsystem("i2c")?;
-
     for device in enumerator.scan_devices()? {
+        let name = device.sysname().to_str().unwrap_or("");
+        // Add a bus
+        if name.starts_with("i2c-") && name.matches('-').count() == 1 {
+            if let Ok(id) = name[4..].parse::<u8>() {
+                // Initialize the entry so the bus exists in the map
+                map.entry(id).or_insert_with(Vec::new);
+            }
+        }
+        // Add devices
         if let Some(parent) = device.parent() {
-            //let parent_name = parent.sysname().to_string_lossy().into_owned();
-            let parent_name: Vec<&str> = parent.sysname().to_str().unwrap_or("").split('-').collect();
-            if parent_name[0] == "i2c" {
-                let bus_id = parent_name[1].parse::<u8>().expect("Bus ID non-integer!");
-                map.entry(bus_id).or_insert_with(Vec::new).push(device);
+            let parent_name = parent.sysname().to_str().unwrap_or("");
+            if let Some(id_str) = parent_name.strip_prefix("i2c-") {
+                if let Ok(bus_id) = id_str.parse::<u8>() {
+                    map.entry(bus_id).or_insert_with(Vec::new).push(device);
+                }
             }
         }
     }
     Ok(map)
 }
 
+/// Performs full audit (scan) of the I2C subsystem via udev and return found device info.
+/// 
+/// Optionally performs hardware probe (via SMBus Write Quick) - this probes the full range
+///  of possible addresses (so can find "ghost" devices not in udev) but only for the busses
+///  that already have slave devices in udev.
 pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>> {
     let udev_map = get_i2c_udev_map()?;
     let mut board_report = Vec::new();
