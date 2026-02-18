@@ -173,8 +173,6 @@ pub struct I2cBusReport {
 }
 
 /// Returns either `name` or entry from `uevent` of a particular I2C device.
-///
-/// TODO: probably redundant now that we can use udev
 pub fn get_device_info(bus_id: u32, addr: u16) -> String {
     let base_path = format!("/sys/bus/i2c/devices/{}-{:04x}", bus_id, addr);
     let name_path = format!("{}/name", base_path);
@@ -207,7 +205,6 @@ pub fn get_device_info(bus_id: u32, addr: u16) -> String {
 /// Performs full scan of I2C subsystem for the full range of addresses.
 ///
 /// Both sysfs scan and harware probes (optional, via smbus_quick_write) are performed.
-/// TODO: redundant as we can now use udev?
 pub fn full_system_scan(enable_hw_probe: bool) -> Result<Vec<I2cBusReport>> {
     let busses = discover_buses()?;
     let mut reports = Vec::new();
