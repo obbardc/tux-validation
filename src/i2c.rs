@@ -1,4 +1,4 @@
-use crate::device::{BusStatus, DeviceAddress, DeviceStatus, Subsystem, TuxBus, TuxDevice};
+use crate::device::{BusStatus, DeviceAddress, DeviceStatus, Subsystem, TuxBus, TuxDevice, DeviceDetails, I2cProperties};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
@@ -345,6 +345,8 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
                         hw_responding: true,
                         driver_bound: None,
                     },
+                    details: DeviceDetails::I2c(I2cProperties),
+                    children: Vec::new(),
                     attributes: HashMap::new(),
                 });
             }
