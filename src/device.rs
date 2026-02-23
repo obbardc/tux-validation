@@ -17,8 +17,11 @@ pub enum DeviceAddress {
         address: u16, // e.g. {7, 0x000a}
     },
     Usb {
-        port: String,
-    }, // e.g. "1-1.2"
+        bus: u8,
+        port_path: String, // e.g., "1-1.2" (Bus 1, Port 1, Hub Port 2)
+        vid: String,       // "046d"
+        pid: String,       // "c05a"
+    },
     Pci {
         slot: String,
     }, // e.g. "00:02.0"
@@ -41,7 +44,41 @@ impl DeviceAddress {
             None
         }
     }
+    /// Returns the USB port_path if this is an I2C device, otherwise None
+    pub fn as_usb_port_path(&self) -> Option<String> {
+        if let Self::Usb { port_path, .. } = self {
+            Some(port_path.clone())
+        } else {
+            None
+        }
+    }
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "props")]
+pub enum DeviceDetails {
+    Usb(UsbProperties),
+    I2c(I2cProperties),
+    None,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UsbProperties {
+    pub speed: String,
+    pub interfaces: Vec<UsbInterface>,
+    pub dev_num: u8,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UsbInterface {
+    pub if_num: u32,
+    pub class: String,
+    pub driver: Option<String>,
+}
+
+//TODO: need it?
+#[derive(Debug, Clone, Serialize)]
+pub struct I2cProperties;
 
 /// Device class
 #[derive(Debug, Clone, Serialize)]
@@ -49,6 +86,8 @@ pub struct TuxDevice {
     pub name: String,
     pub address: DeviceAddress,
     pub status: DeviceStatus,
+    pub details: DeviceDetails, 
+    pub children: Vec<TuxDevice>,
     pub attributes: HashMap<String, String>, // Extra optional info
 }
 
@@ -81,14 +120,13 @@ pub struct TuxBus {
 impl TuxDevice {
     /// Create a device instance from a udev entry
     pub fn from_udev(dev: &udev::Device) -> Option<Self> {
-        // Decide if clent device
+        //TODO: might be better to use Visitor design pattern.
+        let dev_sysname = dev.sysname().to_str()?;
         let parent = dev.parent()?;
         let parent_sysname = parent.sysname().to_str()?;
-
         let address = if parent_sysname.starts_with("i2c-") {
             // --- I2C LOGIC ---
             let bus = parent_sysname.strip_prefix("i2c-")?.parse::<u8>().ok()?;
-            let dev_sysname = dev.sysname().to_str()?;
             let addr_str = dev_sysname.split('-').nth(1)?;
             let addr = match u16::from_str_radix(addr_str, 16) {
                 Ok(val) => val,
@@ -102,19 +140,40 @@ impl TuxDevice {
                 }
             };
             DeviceAddress::I2c { bus, address: addr }
-        } else if parent_sysname.contains("usb") {
-            // --- FUTURE USB LOGIC ---
-            return None;
+        } else if dev.devtype().map_or(false, |t| t == "usb_device") {
+            // --- USB LOGIC ---
+            DeviceAddress::Usb {
+                    bus: dev.attribute_value("busnum")?.to_str()?.parse().ok()?,
+                    port_path: dev_sysname.to_string(),
+                    vid: dev.attribute_value("idVendor")?.to_str()?.to_string(),
+                    pid: dev.attribute_value("idProduct")?.to_str()?.to_string(),
+                }
         } else {
             return None;
         };
+        
+        // TODO: Should we be collecting all device attributes or this is not reasonable and
+        //  then it's just easier to keep the udev::Device objects?
 
         let driver = dev.driver().and_then(|s| s.to_str()).map(|s| s.to_string());
-        let name = dev
-            .attribute_value("name")
-            .and_then(|v| v.to_str())
-            .unwrap_or("Unknown")
-            .to_string();
+        let name = match &address {
+            DeviceAddress::I2c { .. } => dev
+                .attribute_value("name")
+                .and_then(|v| v.to_str())
+                .unwrap_or("Unknown I2C Device")
+                .to_string(),
+
+            DeviceAddress::Usb { .. } => dev
+                .attribute_value("product")
+                .and_then(|v| v.to_str())
+                .unwrap_or("Unknown USB Device")
+                .to_string(),
+            
+            DeviceAddress::Pci { .. } => {
+            // To be elaborated later
+                "PCI Device".to_string()
+            }
+        };
 
         Some(TuxDevice {
             name,
@@ -124,6 +183,8 @@ impl TuxDevice {
                 hw_responding: false, // To be filled by hw_probe
                 driver_bound: driver,
             },
+            details: DeviceDetails::None,
+            children: Vec::new(),
             attributes: HashMap::new(),
         })
     }
