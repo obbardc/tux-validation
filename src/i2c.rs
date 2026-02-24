@@ -265,7 +265,7 @@ pub fn scan_i2c_subsystem_with_udev() -> Result<()> {
 /// Sweeps through udev records for I2C clients and returns a {bus: device} map.
 pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     let mut map = HashMap::new();
-    let mut enumerator = udev::Enumerator::new()?;
+    let mut enumerator = Enumerator::new()?;
     enumerator.match_subsystem("i2c")?;
     for device in enumerator.scan_devices()? {
         let name = device.sysname().to_str().unwrap_or("");
