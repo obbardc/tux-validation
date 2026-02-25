@@ -5,8 +5,8 @@ use tux_validation::usb::{Config, audit_usb_subsystem, print_and_verify_usb};
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
 struct Args {
-    /// Path to expected configuration
-    config: String,
+    /// Path to expected configuration (optional)
+    config: Option<String>,
 
     /// Print serial ID
     #[arg(long)]
@@ -20,9 +20,14 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    // Load the blueprint from a file
-    let config_str = fs::read_to_string(args.config)?;
-    let config: Config = toml::from_str(&config_str)?;
+    // Optionally load the blueprint from a file
+    let blueprint = if let Some(path) = args.config {
+        let config_str = fs::read_to_string(path)?;
+        let config: Config = toml::from_str(&config_str)?;
+        config.usb_devices
+    } else {
+        Vec::new() // Default to an empty list if no config provided
+    };
 
     // Perform the scan
     let buses = audit_usb_subsystem()?;
@@ -39,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Pass the config.usb_devices to your audit function
-    print_and_verify_usb(&buses, &config.usb_devices, args.serial);
+    print_and_verify_usb(&buses, &blueprint, args.serial);
 
     Ok(())
 }
