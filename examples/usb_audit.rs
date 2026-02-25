@@ -1,6 +1,6 @@
 use clap::Parser;
-use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb, Config};
 use std::fs;
+use tux_validation::usb::{Config, audit_usb_subsystem, print_and_verify_usb};
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
@@ -16,7 +16,6 @@ struct Args {
     #[arg(long)]
     verbose: bool,
 }
-
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();

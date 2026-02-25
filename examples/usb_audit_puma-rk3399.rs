@@ -1,7 +1,7 @@
 use clap::Parser;
-use tux_validation::device::{TuxDevice, DeviceDetails, DeviceAddress, UsbInterface};
-use tux_validation::usb::audit_usb_subsystem;
 use colored::*;
+use tux_validation::device::{DeviceAddress, DeviceDetails, TuxDevice, UsbInterface};
+use tux_validation::usb::audit_usb_subsystem;
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
@@ -72,19 +72,42 @@ fn main() -> anyhow::Result<()> {
 
 fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], serial: bool) {
     let indent = "  ".repeat(depth);
-    
+
     // Attempt to match device against blueprint
-    if let DeviceDetails::Usb(props) = &dev.details && let DeviceAddress::Usb { vid, pid, port_path, .. } = &dev.address {
+    if let DeviceDetails::Usb(props) = &dev.details
+        && let DeviceAddress::Usb {
+            vid,
+            pid,
+            port_path,
+            ..
+        } = &dev.address
+    {
         let expectation = blueprint.iter().find(|e| e.vid == vid && e.pid == pid);
-        
+
         // Print Device Header
-        let icon = if expectation.is_some() { "★".yellow() } else { "•".white() };
-        println!("{}{} {} [{}:{}] at {} ({}M)", 
-            indent, icon, dev.name.green(), vid, pid, port_path.dimmed(), props.speed.blue().bold()
+        let icon = if expectation.is_some() {
+            "★".yellow()
+        } else {
+            "•".white()
+        };
+        println!(
+            "{}{} {} [{}:{}] at {} ({}M)",
+            indent,
+            icon,
+            dev.name.green(),
+            vid,
+            pid,
+            port_path.dimmed(),
+            props.speed.blue().bold()
         );
 
         if serial {
-            println!("{}    {} {}", indent, "ID:".dimmed(), props.serial_id.dimmed());
+            println!(
+                "{}    {} {}",
+                indent,
+                "ID:".dimmed(),
+                props.serial_id.dimmed()
+            );
         }
 
         // Check Interfaces
@@ -109,18 +132,34 @@ fn verify_interface(iface: &UsbInterface, indent: &str, expectation: Option<&Usb
         _ => &iface.class,
     };
     let driver = iface.driver.as_deref().unwrap_or("none");
-    
+
     match expectation {
         Some(exp) if exp.required_driver != driver => {
-            println!("{}  ┗━ {} If {:02} [{}]: Driver is {}, but blueprint requires {}!", 
-                indent, "FAIL".red().bold(), iface.if_num, class_name, driver.red(), exp.required_driver.cyan());
+            println!(
+                "{}  ┗━ {} If {:02} [{}]: Driver is {}, but blueprint requires {}!",
+                indent,
+                "FAIL".red().bold(),
+                iface.if_num,
+                class_name,
+                driver.red(),
+                exp.required_driver.cyan()
+            );
         }
         Some(_) => {
-            println!("{}  ┗━ {} If {:02} [{}]: Driver {} verified", 
-                indent, "PASS".green(), iface.if_num, class_name, driver.green());
+            println!(
+                "{}  ┗━ {} If {:02} [{}]: Driver {} verified",
+                indent,
+                "PASS".green(),
+                iface.if_num,
+                class_name,
+                driver.green()
+            );
         }
         None => {
-            println!("{}  ┗━ If {:02} [{}]: Driver {}", indent, iface.if_num, class_name, driver);
+            println!(
+                "{}  ┗━ If {:02} [{}]: Driver {}",
+                indent, iface.if_num, class_name, driver
+            );
         }
     }
 }
