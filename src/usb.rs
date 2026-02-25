@@ -95,11 +95,16 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
         .and_then(|v| v.to_str())
         .unwrap_or("Unknown")
         .to_string();
+    let serial_id = current_udev.property_value("ID_SERIAL")
+        .and_then(|v| v.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
 
     tux_dev.details = DeviceDetails::Usb(UsbProperties {
         speed,
         interfaces,
         dev_num,
+        serial_id
     });
     tux_dev.status.hw_responding = true;
     tux_dev.children = children;

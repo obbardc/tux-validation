@@ -68,6 +68,7 @@ pub struct UsbProperties {
     pub speed: String,
     pub interfaces: Vec<UsbInterface>,
     pub dev_num: u8,
+    pub serial_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

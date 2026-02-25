@@ -1,7 +1,19 @@
+use clap::Parser;
 use tux_validation::device::{TuxDevice, DeviceDetails, DeviceAddress, UsbInterface};
 use tux_validation::usb::audit_usb_subsystem;
 use colored::*;
 
+#[derive(Parser)]
+#[command(author, version, about = "Performs USB subsystem audit.")]
+struct Args {
+    /// Print serial ID
+    #[arg(long)]
+    serial: bool,
+
+    /// Print debug info
+    #[arg(long)]
+    verbose: bool,
+}
 /// Configuration for a specific board
 pub struct UsbExpectation {
     pub name: &'static str,
@@ -12,6 +24,7 @@ pub struct UsbExpectation {
 }
 
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
     // Define expectations
     let blueprint = vec![
         UsbExpectation {
@@ -34,27 +47,29 @@ fn main() -> anyhow::Result<()> {
     let buses = audit_usb_subsystem()?;
 
     // For now, verbose ouotput in the beginning
-    for bus in &buses {
-        println!("--- BUS {} ---", bus.id);
-        for dev in &bus.devices {
-            dev.print_json()?;
+    if args.verbose {
+        for bus in &buses {
+            println!("--- BUS {} ---", bus.id);
+            for dev in &bus.devices {
+                dev.print_json()?;
+            }
         }
+        println!("");
     }
-    println!("");
 
     println!("{}", "\n=== USB SUBSYSTEM ===".bold().cyan());
 
     for bus in &buses {
         println!("\n{} (Bus {})", "Bus Controller".bold(), bus.id.yellow());
         for device in &bus.devices {
-            audit_recursive(device, 0, &blueprint);
+            audit_recursive(device, 0, &blueprint, args.serial);
         }
     }
 
     Ok(())
 }
 
-fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation]) {
+fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], serial: bool) {
     let indent = "  ".repeat(depth);
     
     // Attempt to match device against blueprint
@@ -67,6 +82,10 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation]) 
             indent, icon, dev.name.green(), vid, pid, port_path.dimmed(), props.speed.blue().bold()
         );
 
+        if serial {
+            println!("{}    {} {}", indent, "ID:".dimmed(), props.serial_id.dimmed());
+        }
+
         // Check Interfaces
         for iface in &props.interfaces {
             verify_interface(iface, &indent, expectation);
@@ -75,7 +94,7 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation]) 
 
     // Recurse into hub children
     for child in &dev.children {
-        audit_recursive(child, depth + 1, blueprint);
+        audit_recursive(child, depth + 1, blueprint, serial);
     }
 }
 
