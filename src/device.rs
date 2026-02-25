@@ -142,7 +142,7 @@ impl TuxDevice {
                 }
             };
             DeviceAddress::I2c { bus, address: addr }
-        } else if dev.devtype().map_or(false, |t| t == "usb_device") {
+        } else if dev.devtype().is_some_and(|t| t == "usb_device") {
             // --- USB LOGIC ---
             DeviceAddress::Usb {
                 bus: dev.attribute_value("busnum")?.to_str()?.parse().ok()?,
