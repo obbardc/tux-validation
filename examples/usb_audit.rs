@@ -58,20 +58,18 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation]) 
     let indent = "  ".repeat(depth);
     
     // Attempt to match device against blueprint
-    if let DeviceAddress::Usb { vid, pid, port_path, .. } = &dev.address {
+    if let DeviceDetails::Usb(props) = &dev.details && let DeviceAddress::Usb { vid, pid, port_path, .. } = &dev.address {
         let expectation = blueprint.iter().find(|e| e.vid == vid && e.pid == pid);
         
         // Print Device Header
-        let icon = if expectation.is_some() { "★" } else { "•" };
-        println!("{}{} {} [{}:{}] at {}", 
-            indent, icon.yellow(), dev.name.green(), vid, pid, port_path.dimmed()
+        let icon = if expectation.is_some() { "★".yellow() } else { "•".white() };
+        println!("{}{} {} [{}:{}] at {} ({}M)", 
+            indent, icon, dev.name.green(), vid, pid, port_path.dimmed(), props.speed.blue().bold()
         );
 
         // Check Interfaces
-        if let DeviceDetails::Usb(props) = &dev.details {
-            for iface in &props.interfaces {
-                verify_interface(iface, &indent, expectation);
-            }
+        for iface in &props.interfaces {
+            verify_interface(iface, &indent, expectation);
         }
     }
 
@@ -82,19 +80,27 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation]) 
 }
 
 fn verify_interface(iface: &UsbInterface, indent: &str, expectation: Option<&UsbExpectation>) {
+    let class_name = match iface.class.as_str() {
+        "01" => "Audio",
+        "09" => "Hub",
+        "0e" => "Video",
+        "03" => "HID",
+        "ff" => "Vendor-Specific",
+        _ => &iface.class,
+    };
     let driver = iface.driver.as_deref().unwrap_or("none");
     
     match expectation {
         Some(exp) if exp.required_driver != driver => {
-            println!("{}  ┗━ {} If {:02}: Driver is {}, but blueprint requires {}!", 
-                indent, "FAIL".red().bold(), iface.if_num, driver.red(), exp.required_driver.cyan());
+            println!("{}  ┗━ {} If {:02} [{}]: Driver is {}, but blueprint requires {}!", 
+                indent, "FAIL".red().bold(), iface.if_num, class_name, driver.red(), exp.required_driver.cyan());
         }
         Some(_) => {
-            println!("{}  ┗━ {} If {:02}: Driver {} verified", 
-                indent, "PASS".green(), iface.if_num, driver.green());
+            println!("{}  ┗━ {} If {:02} [{}]: Driver {} verified", 
+                indent, "PASS".green(), iface.if_num, class_name, driver.green());
         }
         None => {
-            println!("{}  ┗━ If {:02}: Driver {}", indent, iface.if_num, driver);
+            println!("{}  ┗━ If {:02} [{}]: Driver {}", indent, iface.if_num, class_name, driver);
         }
     }
 }

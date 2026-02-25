@@ -10,6 +10,7 @@ pub struct DeviceStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "props")]
 pub enum DeviceAddress {
     I2c {
         bus: u8,

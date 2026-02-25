@@ -41,6 +41,8 @@ pub fn audit_usb_subsystem() -> Result<Vec<TuxBus>> {
         }
     }
 
+    buses.sort_by_key(|bus| bus.id.parse::<u8>().unwrap_or(0));
+
     Ok(buses)
 }
 
@@ -99,7 +101,7 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
         interfaces,
         dev_num,
     });
-    
+    tux_dev.status.hw_responding = true;
     tux_dev.children = children;
 
     Ok(tux_dev)
