@@ -146,7 +146,7 @@ pub fn print_and_verify_usb(buses: &[TuxBus], blueprint: &[UsbExpectation], seri
     for bus in buses {
         println!("\n{} (Bus {})", "Bus Controller".bold(), bus.id.yellow());
         for device in &bus.devices {
-            audit_recursive(device, 0, &blueprint, serial);
+            audit_recursive(device, 0, blueprint, serial);
         }
     }
 }
