@@ -1,0 +1,15 @@
+[[usb_devices]]
+name = "Mule CAN Adapter"
+vid = "2294"
+pid = "425a"
+expected_port = "3-1.4"
+required_driver = "ucan"
+min_speed = "12M"
+
+[[usb_devices]]
+name = "Onboard Hub"
+vid = "05e3"
+pid = "0610"
+expected_port = "3-1"
+required_driver = "hub"
+min_speed = "480M"
