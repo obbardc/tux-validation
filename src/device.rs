@@ -88,7 +88,7 @@ pub struct TuxDevice {
     pub name: String,
     pub address: DeviceAddress,
     pub status: DeviceStatus,
-    pub details: DeviceDetails, 
+    pub details: DeviceDetails,
     pub children: Vec<TuxDevice>,
     pub attributes: HashMap<String, String>, // Extra optional info
 }
@@ -145,15 +145,15 @@ impl TuxDevice {
         } else if dev.devtype().map_or(false, |t| t == "usb_device") {
             // --- USB LOGIC ---
             DeviceAddress::Usb {
-                    bus: dev.attribute_value("busnum")?.to_str()?.parse().ok()?,
-                    port_path: dev_sysname.to_string(),
-                    vid: dev.attribute_value("idVendor")?.to_str()?.to_string(),
-                    pid: dev.attribute_value("idProduct")?.to_str()?.to_string(),
-                }
+                bus: dev.attribute_value("busnum")?.to_str()?.parse().ok()?,
+                port_path: dev_sysname.to_string(),
+                vid: dev.attribute_value("idVendor")?.to_str()?.to_string(),
+                pid: dev.attribute_value("idProduct")?.to_str()?.to_string(),
+            }
         } else {
             return None;
         };
-        
+
         // TODO: Should we be collecting all device attributes or this is not reasonable and
         //  then it's just easier to keep the udev::Device objects?
 
@@ -170,9 +170,9 @@ impl TuxDevice {
                 .and_then(|v| v.to_str())
                 .unwrap_or("Unknown USB Device")
                 .to_string(),
-            
+
             DeviceAddress::Pci { .. } => {
-            // To be elaborated later
+                // To be elaborated later
                 "PCI Device".to_string()
             }
         };

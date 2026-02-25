@@ -1,4 +1,7 @@
-use crate::device::{BusStatus, DeviceAddress, DeviceStatus, Subsystem, TuxBus, TuxDevice, DeviceDetails, I2cProperties};
+use crate::device::{
+    BusStatus, DeviceAddress, DeviceDetails, DeviceStatus, I2cProperties, Subsystem, TuxBus,
+    TuxDevice,
+};
 use anyhow::Result;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
