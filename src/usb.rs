@@ -1,10 +1,12 @@
 use crate::device::{
-    TuxBus, TuxDevice, DeviceDetails, UsbProperties, 
-    UsbInterface, Subsystem, BusStatus
+    TuxBus, TuxDevice, DeviceDetails, DeviceAddress,
+    UsbProperties, UsbInterface, Subsystem, BusStatus
 };
 use anyhow::Result;
 use udev::Enumerator;
 use std::collections::HashMap;
+use serde::Deserialize;
+use colored::*;
 
 /// Scans the USB subsystem and returns a list of TuxBus controllers,
 /// each containing a recursive tree of TuxDevices.
@@ -110,4 +112,109 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
     tux_dev.children = children;
 
     Ok(tux_dev)
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Config {
+    pub usb_devices: Vec<UsbExpectation>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UsbExpectation {
+    pub name: String,
+    pub vid: String,
+    pub pid: String,
+    pub expected_port: String,
+    pub required_driver: String,
+    pub min_speed: Option<String>,
+}
+
+pub fn print_and_verify_usb(buses: &[TuxBus], blueprint: &[UsbExpectation], serial: bool) {
+    for bus in buses {
+        println!("\n{} (Bus {})", "Bus Controller".bold(), bus.id.yellow());
+        for device in &bus.devices {
+            audit_recursive(device, 0, &blueprint, serial);
+        }
+    }
+}
+
+fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], serial: bool) {
+    let indent = "  ".repeat(depth);
+    
+    // Attempt to match device against blueprint
+    if let DeviceDetails::Usb(props) = &dev.details && let DeviceAddress::Usb { vid, pid, port_path, .. } = &dev.address {
+        let expectation = blueprint.iter().find(|e| &e.vid == vid && &e.pid == pid);
+        
+        // Print Device Header
+        match expectation {
+            Some(exp) => 
+                match &exp.min_speed {
+                    Some(exp_speed) if verify_speed(&props.speed, exp_speed) => {
+                        println!("{}{} {} [{}:{}] at {} ({}M - {})", indent, "★".yellow(), dev.name.cyan(), vid, pid, port_path.dimmed(), props.speed.green().bold(), "expected".green());
+                    }
+                    Some(_) => {
+                        println!("{}{} {} [{}:{}] at {} ({}M - {})", indent, "★".yellow(), dev.name.cyan(), vid, pid, port_path.dimmed(), props.speed.red().bold(), "unexpected".red());
+                    }
+                    None => {
+                        println!("{}{} {} [{}:{}] at {} ({}M)", indent, "★".yellow(), dev.name.cyan(), vid, pid, port_path.dimmed(), props.speed.blue().bold());
+                    }
+                }
+            None => {
+                println!("{}{} {} [{}:{}] at {} ({}M)", indent, "•".white(), dev.name.cyan(), vid, pid, port_path.dimmed(), props.speed.blue().bold());
+            }
+        }
+
+        // Optionally print ID_SERIAL property
+        if serial {
+            println!("{}    {} {}", indent, "ID:".dimmed(), props.serial_id.dimmed());
+        }
+
+        // Check Interfaces
+        for iface in &props.interfaces {
+            verify_interface(iface, &indent, expectation);
+        }
+    }
+
+    // Recurse into hub children
+    for child in &dev.children {
+        audit_recursive(child, depth + 1, blueprint, serial);
+    }
+}
+
+fn verify_speed(actual: &str, expected_min: &str) -> bool {
+    let speed_to_val = |s: &str| -> u32 {
+        // Strip everything that isn't a digit (like "M" or "Mbps")
+        let cleaned = s.trim_end_matches(|c: char| !c.is_numeric());
+        
+        // Parse directly to u32. If it fails, return 0.
+        cleaned.parse::<u32>().unwrap_or(0)
+    };
+    
+    speed_to_val(actual) >= speed_to_val(expected_min)
+}
+
+fn verify_interface(iface: &UsbInterface, indent: &str, expectation: Option<&UsbExpectation>) {
+    let class_name = match iface.class.as_str() {
+        "01" => "Audio",
+        "09" => "Hub",
+        "0e" => "Video",
+        "03" => "HID",
+        "ff" => "Vendor-Specific",
+        _ => &iface.class,
+    };
+    let driver = iface.driver.as_deref().unwrap_or("none");
+    
+    match expectation {
+        Some(exp) if exp.required_driver != driver => {
+            println!("{}  ┗━ If {:02} [{}]: Driver {}, (expected {})", 
+                indent, iface.if_num, class_name, driver.red().bold(), exp.required_driver.red());
+        }
+        Some(_) => {
+            println!("{}  ┗━ If {:02} [{}]: Driver {} ({})", 
+                indent, iface.if_num, class_name, driver.green().bold(), "expected".green());
+        }
+        None => {
+            println!("{}  ┗━ If {:02} [{}]: Driver {}", indent, iface.if_num, class_name, driver);
+        }
+    }
 }
