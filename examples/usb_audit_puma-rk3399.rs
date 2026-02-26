@@ -1,5 +1,6 @@
 use clap::Parser;
-use tux_validation::usb::{UsbExpectation, audit_usb_subsystem, print_and_verify_usb};
+use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
+use tux_validation::config::UsbExpectation;
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
