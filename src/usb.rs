@@ -127,11 +127,13 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
     Ok(tux_dev)
 }
 
+/// Collection of USB devices blueprints.
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub usb_devices: Vec<UsbExpectation>,
 }
 
+/// Blueprint for USB device parameters
 #[derive(Deserialize, Debug)]
 pub struct UsbExpectation {
     pub name: String,
@@ -142,6 +144,9 @@ pub struct UsbExpectation {
     pub min_speed: Option<String>,
 }
 
+/// Prints USB device tree for each bus, and verifies parameters against provided blueprint.
+///
+/// Optionally prints ID_SERIAL property from udev.
 pub fn print_and_verify_usb(buses: &[TuxBus], blueprint: &[UsbExpectation], serial: bool) {
     println!("{}", "\n=== USB SUBSYSTEM ===".bold().cyan());
     for bus in buses {
@@ -152,6 +157,9 @@ pub fn print_and_verify_usb(buses: &[TuxBus], blueprint: &[UsbExpectation], seri
     }
 }
 
+/// Recursively prints details for nested USB devices and their interfaces.
+///
+/// Dependent on whether actual data matches provided expectations or not.
 fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], serial: bool) {
     let indent = "  ".repeat(depth);
 
@@ -244,6 +252,7 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], 
     }
 }
 
+/// Checks if expected USB speed is equal or larger than the actual one.
 fn verify_speed(actual: &str, expected_min: &str) -> bool {
     let speed_to_val = |s: &str| -> u32 {
         // Strip everything that isn't a digit (like "M" or "Mbps")
@@ -256,6 +265,7 @@ fn verify_speed(actual: &str, expected_min: &str) -> bool {
     speed_to_val(actual) >= speed_to_val(expected_min)
 }
 
+/// Prints USB interface details, dependent on whether it matches expectations or not.
 fn verify_interface(iface: &UsbInterface, indent: &str, expectation: Option<&UsbExpectation>) {
     let class_name = match iface.class.as_str() {
         "01" => "Audio",
@@ -270,7 +280,7 @@ fn verify_interface(iface: &UsbInterface, indent: &str, expectation: Option<&Usb
     match expectation {
         Some(exp) if exp.required_driver != driver => {
             println!(
-                "{}  ┗━ If {:02} [{}]: Driver {} - expected {})",
+                "{}  ┗━ If {:02} [{}]: Driver {} - expected {}",
                 indent,
                 iface.if_num,
                 class_name,
