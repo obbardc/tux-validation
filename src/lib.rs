@@ -1,4 +1,5 @@
 pub mod device;
+pub mod config;
 pub mod i2c;
 pub mod os_release;
 pub mod usb;

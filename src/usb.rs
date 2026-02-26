@@ -2,9 +2,9 @@ use crate::device::{
     BusStatus, DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface,
     UsbProperties,
 };
+use crate::config::{UsbExpectation};
 use anyhow::Result;
 use colored::*;
-use serde::Deserialize;
 use std::collections::HashMap;
 use udev::Enumerator;
 
@@ -125,23 +125,6 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
     tux_dev.children = children;
 
     Ok(tux_dev)
-}
-
-/// Collection of USB devices blueprints.
-#[derive(Deserialize, Debug)]
-pub struct Config {
-    pub usb_devices: Vec<UsbExpectation>,
-}
-
-/// Blueprint for USB device parameters
-#[derive(Deserialize, Debug)]
-pub struct UsbExpectation {
-    pub name: String,
-    pub vid: String,
-    pub pid: String,
-    pub expected_port: String,
-    pub required_driver: String,
-    pub min_speed: Option<String>,
 }
 
 /// Prints USB device tree for each bus, and verifies parameters against provided blueprint.
