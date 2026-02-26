@@ -58,6 +58,7 @@ Bus ID | Address | Name            | Driver               | SMBus Write Quick
 
 <details>
 <summary><b>usb_audit</b></summary>
+This will be fancy-colored in a terminal:
 
 <pre>
 $ ./target/debug/examples/usb_audit
@@ -113,6 +114,24 @@ Bus Controller (Bus 4)
   • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
     ┗━ If 00 [Hub]: Driver hub
 </pre>
+where `puma-rk3399.toml` contains
+```
+[[usb_devices]]
+name = "Mule CAN Adapter"
+vid = "2294"
+pid = "425a"
+expected_port = "3-1.4"
+required_driver = "ucan"
+min_speed = "12M"
+
+[[usb_devices]]
+name = "Onboard Hub"
+vid = "05e3"
+pid = "0610"
+expected_port = "3-1"
+required_driver = "hub"
+min_speed = "480M"
+```
 </details>
 
 ### Runt unit tests
