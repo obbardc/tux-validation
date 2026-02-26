@@ -45,7 +45,7 @@ impl DeviceAddress {
             None
         }
     }
-    /// Returns the USB port_path if this is an I2C device, otherwise None
+    /// Returns the USB port_path if this is a USB device, otherwise None
     pub fn as_usb_port_path(&self) -> Option<String> {
         if let Self::Usb { port_path, .. } = self {
             Some(port_path.clone())
