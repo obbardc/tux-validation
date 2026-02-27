@@ -13,3 +13,21 @@ pid = "0610"
 expected_port = "3-1"
 required_driver = "hub"
 min_speed = "480M"
+
+[[i2c_devices]]
+name = "rk808 PMIC"
+bus = 0
+address = "0x1b"
+required_driver = "rk8xx-i2c"
+
+[[i2c_devices]]
+name = "sgtl5000 Audio Codec"
+bus = 4
+address = "0x0a"
+required_driver = "sgtl5000"
+
+[[i2c_devices]]
+name = "Some"
+bus = 7
+address = "0x50"
+required_driver = "fan53555-regulator"

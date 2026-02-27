@@ -366,6 +366,7 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
 }
 
 pub fn print_and_verify_i2c(buses: &[TuxBus], blueprint: &[I2cExpectation]) {
+    println!("\n{}", "=== I2C SUBSYSTEM ===".bold().cyan());
     for bus in buses {
         // Skip empty buses for cleaner output
         if bus.devices.is_empty() { continue; }

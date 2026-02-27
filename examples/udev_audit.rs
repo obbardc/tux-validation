@@ -42,6 +42,8 @@ fn main() -> anyhow::Result<()> {
     // If no specific subsystem flag is provided, we can default to scanning all
     let scan_all = !args.usb && !args.i2c;
 
+    println!("\n{}", "===== UDEV-AUDIT =====".bold().cyan());
+    
     // I2C Audit
     if args.i2c || scan_all {
         println!("\n{}", "=== UDEV-AUDIT: I2C SUBSYSTEM ===".bold().cyan());
