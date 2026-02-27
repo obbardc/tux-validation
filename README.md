@@ -20,57 +20,44 @@ cargo build --examples
 ### Run examples
 
 <details>
-<summary><b>i2c_discover_devices</b></summary>
-<pre>
-$ ./target/debug/examples/i2c_discover_devices                     
---------------------------------------------------------------------------------
-Bus ID | Address | Name            | Driver               | SMBus Write Quick
---------------------------------------------------------------------------------
-0      | 0x1b    | rk808           | rk8xx-i2c            | false            
-       | 0x60    | fan53555        | fan53555-regulator   | false            
---------------------------------------------------------------------------------
-4      | 0x0a    | sgtl5000        | sgtl5000             | false            
---------------------------------------------------------------------------------
-7      | 0x18    | amc6821         | amc6821              | false            
-       | 0x6f    | isl1208         | None                 | false            
---------------------------------------------------------------------------------
-8      | 0x60    | fan53555        | fan53555-regulator   | false            
---------------------------------------------------------------------------------
-</pre>
-<pre>
-$ sudo ./target/debug/examples/i2c_discover_devices --hw-probe
---------------------------------------------------------------------------------
-Bus ID | Address | Name            | Driver               | SMBus Write Quick
---------------------------------------------------------------------------------
-0      | 0x1b    | rk808           | rk8xx-i2c            | true             
-       | 0x60    | fan53555        | fan53555-regulator   | true             
---------------------------------------------------------------------------------
-4      | 0x0a    | sgtl5000        | sgtl5000             | true             
---------------------------------------------------------------------------------
-7      | 0x18    | amc6821         | amc6821              | true             
-       | 0x6f    | isl1208         | None                 | true             
-       | 0x50    | Unknown         | None                 | true             
---------------------------------------------------------------------------------
-8      | 0x60    | fan53555        | fan53555-regulator   | true             
---------------------------------------------------------------------------------
-</pre>
-</details>
-
-<details>
-<summary><b>usb_audit</b></summary>
+<summary><b>udev_audit</b></summary>
 This will be fancy-colored in a terminal:
 
 <pre>
-$ ./target/debug/examples/usb_audit
+$ ./target/debug/examples/udev_audit
+
+===== UDEV-AUDIT =====
+
+=== I2C SUBSYSTEM ===
+
+I2C Bus (Bus 0)
+  • rk808 [0x1b]
+    ┗━ Driver: rk8xx-i2c
+  • fan53555 [0x60]
+    ┗━ Driver: fan53555-regulator
+
+I2C Bus (Bus 4)
+  • sgtl5000 [0x0a]
+    ┗━ Driver: sgtl5000
+
+I2C Bus (Bus 7)
+  • amc6821 [0x18]
+    ┗━ Driver: amc6821
+  • isl1208 [0x6f]
+    ┗━ Driver: none
+
+I2C Bus (Bus 8)
+  • fan53555 [0x60]
+    ┗━ Driver: fan53555-regulator
 
 === USB SUBSYSTEM ===
 
 Bus Controller (Bus 1)
-• Generic Platform OHCI controller [1d6b:0001] at usb1 (12M)
+• EHCI Host Controller [1d6b:0002] at usb1 (480M)
   ┗━ If 00 [Hub]: Driver hub
 
 Bus Controller (Bus 2)
-• EHCI Host Controller [1d6b:0002] at usb2 (480M)
+• Generic Platform OHCI controller [1d6b:0001] at usb2 (12M)
   ┗━ If 00 [Hub]: Driver hub
 
 Bus Controller (Bus 3)
@@ -81,23 +68,44 @@ Bus Controller (Bus 3)
     • Mule USB/CAN Adapter [2294:425a] at 3-1.4 (12M)
       ┗━ If 00 [Vendor-Specific]: Driver none
 
-Bus Controller (Bus 4)
-• xHCI Host Controller [1d6b:0003] at usb4 (5000M)
-  ┗━ If 00 [Hub]: Driver hub
-  • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
-    ┗━ If 00 [Hub]: Driver hub
 </pre>
 <pre>
-$ ./target/debug/examples/usb_audit ./examples/puma-rk3399.toml 
+$ sudo ./target/debug/examples/udev_audit --hw-probe ./examples/puma-rk3399.toml 
+
+===== UDEV-AUDIT =====
+
+=== I2C SUBSYSTEM ===
+
+I2C Bus (Bus 0)
+  ★ rk808 [0x1b]
+    ┗━ Driver rk8xx-i2c - expected (HW: ACK)
+  • fan53555 [0x60]
+    ┗━ Driver: fan53555-regulator (HW: ACK)
+
+I2C Bus (Bus 4)
+  ★ sgtl5000 [0x0a]
+    ┗━ Driver sgtl5000 - expected (HW: ACK)
+
+I2C Bus (Bus 7)
+  • amc6821 [0x18]
+    ┗━ Driver: amc6821 (HW: ACK)
+  • isl1208 [0x6f]
+    ┗━ Driver: none (HW: ACK)
+  ★ Unknown [0x50]
+    ┗━ Driver none - expected fan53555-regulator (HW: ACK)
+
+I2C Bus (Bus 8)
+  • fan53555 [0x60]
+    ┗━ Driver: fan53555-regulator (HW: ACK)
 
 === USB SUBSYSTEM ===
 
 Bus Controller (Bus 1)
-• Generic Platform OHCI controller [1d6b:0001] at usb1 (12M)
+• EHCI Host Controller [1d6b:0002] at usb1 (480M)
   ┗━ If 00 [Hub]: Driver hub
 
 Bus Controller (Bus 2)
-• EHCI Host Controller [1d6b:0002] at usb2 (480M)
+• Generic Platform OHCI controller [1d6b:0001] at usb2 (12M)
   ┗━ If 00 [Hub]: Driver hub
 
 Bus Controller (Bus 3)
@@ -114,6 +122,7 @@ Bus Controller (Bus 4)
   • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
     ┗━ If 00 [Hub]: Driver hub
 </pre>
+
 where `puma-rk3399.toml` contains
 ```
 [[usb_devices]]
@@ -131,6 +140,24 @@ pid = "0610"
 expected_port = "3-1"
 required_driver = "hub"
 min_speed = "480M"
+
+[[i2c_devices]]
+name = "rk808 PMIC"
+bus = 0
+address = "0x1b"
+required_driver = "rk8xx-i2c"
+
+[[i2c_devices]]
+name = "sgtl5000 Audio Codec"
+bus = 4
+address = "0x0a"
+required_driver = "sgtl5000"
+
+[[i2c_devices]]
+name = "Some"
+bus = 7
+address = "0x50"
+required_driver = "fan53555-regulator"
 ```
 </details>
 
