@@ -46,14 +46,12 @@ fn main() -> anyhow::Result<()> {
     
     // I2C Audit
     if args.i2c || scan_all {
-        println!("\n{}", "=== UDEV-AUDIT: I2C SUBSYSTEM ===".bold().cyan());
         let i2c_buses = audit_all_i2c_buses(args.hw_probe)?;
         print_and_verify_i2c(&i2c_buses, &config.i2c_devices);
     }
 
     // USB Audit
     if args.usb || scan_all {
-        println!("\n{}", "=== UDEV-AUDIT: USB SUBSYSTEM ===".bold().cyan());
         let usb_buses = audit_usb_subsystem()?;
         print_and_verify_usb(&usb_buses, &config.usb_devices, args.serial);
     }

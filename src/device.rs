@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct DeviceStatus {
     pub in_udev: bool,
-    pub hw_responding: bool,
+    pub hw_responding: Option<bool>,
     pub driver_bound: Option<String>, // Some("rk808") or None
 }
 
@@ -182,7 +182,7 @@ impl TuxDevice {
             address,
             status: DeviceStatus {
                 in_udev: true,
-                hw_responding: false, // To be filled by hw_probe
+                hw_responding: None, // To be filled by hw_probe
                 driver_bound: driver,
             },
             details: DeviceDetails::None,

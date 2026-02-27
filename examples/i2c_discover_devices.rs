@@ -38,22 +38,32 @@ fn main() -> anyhow::Result<()> {
 
     for bus in i2c_busses {
         if let Some((first, rest)) = bus.devices.split_first() {
+            let hw_resp = match first.status.hw_responding {
+                Some(true) => "ACK",
+                Some(false) => "NACK",
+                None => "NA",
+            };
             println!(
                 "{:<6} | {:<7} | {:<15} | {:<20} | {:<17}",
                 bus.id,
                 format!("0x{:02x}", first.address.as_i2c_address().unwrap()),
                 first.name,
                 first.status.driver_bound.as_deref().unwrap_or("None"),
-                first.status.hw_responding
+                hw_resp
             );
             for dev in rest {
+                let hw_resp = match first.status.hw_responding {
+                    Some(true) => "ACK",
+                    Some(false) => "NACK",
+                    None => "NA",
+                };
                 println!(
                     "{:<6} | {:<7} | {:<15} | {:<20} | {:<17}",
                     "",
                     format!("0x{:02x}", dev.address.as_i2c_address().unwrap()),
                     dev.name,
                     dev.status.driver_bound.as_deref().unwrap_or("None"),
-                    dev.status.hw_responding
+                    hw_resp
                 );
             }
             println!("{:-<80}", "");

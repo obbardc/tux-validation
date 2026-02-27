@@ -121,7 +121,7 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
         dev_num,
         serial_id,
     });
-    tux_dev.status.hw_responding = true;
+    tux_dev.status.hw_responding = Some(true);
     tux_dev.children = children;
 
     Ok(tux_dev)

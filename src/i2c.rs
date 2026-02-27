@@ -326,7 +326,7 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
             if let Some(mut t_dev) = TuxDevice::from_udev(&dev) {
                 if let Some(addr) = t_dev.address.as_i2c_address() {
                     t_dev.status.hw_responding =
-                        bound_hw.contains(&addr) || unbound_hw.contains(&addr);
+                        Some(bound_hw.contains(&addr) || unbound_hw.contains(&addr));
                 }
                 bus_node.devices.push(t_dev);
             }
@@ -347,7 +347,7 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
                     },
                     status: DeviceStatus {
                         in_udev: false,
-                        hw_responding: true,
+                        hw_responding: Some(true),
                         driver_bound: None,
                     },
                     details: DeviceDetails::I2c(I2cProperties),
@@ -389,7 +389,11 @@ fn audit_i2c_device(dev: &TuxDevice, blueprint: &[I2cExpectation]) {
         // Print base device line
 
         let driver = dev.status.driver_bound.as_deref().unwrap_or("none");
-        let hw_resp = if dev.status.hw_responding { "ACK".green() } else { "NACK".red() };
+        let hw_resp = match dev.status.hw_responding {
+            Some(true) => format!(" (HW: {})", "ACK".green().bold()),
+            Some(false) => format!(" (HW: {})", "NACK".red().bold()),
+            None => "".to_string(), // Silently omit if we didn't probe
+        };
 
         // Verification Logic
         match expectation {
@@ -397,19 +401,19 @@ fn audit_i2c_device(dev: &TuxDevice, blueprint: &[I2cExpectation]) {
                 println!("  {} {} [{}]", icon, dev.name.cyan(), addr_str.green().dimmed());
                 if let Some(req_driver) = &exp.required_driver {
                     if req_driver == driver {
-                        println!("    ┗━ Driver {} - expected (HW: {})", 
+                        println!("    ┗━ Driver {} - expected{}", 
                             driver.green().bold(), hw_resp);
                     } else {
-                        println!("    ┗━ Driver {} - expected {} (HW: {})", 
+                        println!("    ┗━ Driver {} - expected {}{}", 
                             driver.red().bold(), req_driver.red(), hw_resp);
                     }
                 } else {
-                    println!("    ┗━ Driver: {} (HW: {})", driver.blue().bold(), hw_resp);
+                    println!("    ┗━ Driver: {}{}", driver.blue().bold(), hw_resp);
                 }
             },
             None => {
                 println!("  {} {} [{}]", icon, dev.name.cyan(), addr_str.red().dimmed());
-                println!("    ┗━ Driver: {} (HW: {})", driver.blue().bold(), hw_resp);
+                println!("    ┗━ Driver: {}{}", driver.blue().bold(), hw_resp);
             }
         }
     }
