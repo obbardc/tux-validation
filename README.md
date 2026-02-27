@@ -68,6 +68,11 @@ Bus Controller (Bus 3)
     • Mule USB/CAN Adapter [2294:425a] at 3-1.4 (12M)
       ┗━ If 00 [Vendor-Specific]: Driver none
 
+Bus Controller (Bus 4)
+• xHCI Host Controller [1d6b:0003] at usb4 (5000M)
+  ┗━ If 00 [Hub]: Driver hub
+  • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
+    ┗━ If 00 [Hub]: Driver hub
 </pre>
 <pre>
 $ sudo ./target/debug/examples/udev_audit --hw-probe ./examples/puma-rk3399.toml 
