@@ -1,9 +1,9 @@
 use clap::Parser;
+use colored::*;
 use std::fs;
 use tux_validation::config::Config;
-use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
 use tux_validation::i2c::{audit_all_i2c_buses, print_and_verify_i2c};
-use colored::*;
+use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
 
 #[derive(Parser)]
 #[command(author, version, about = "udev Subsystems Audit")]
@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     let scan_all = !args.usb && !args.i2c;
 
     println!("\n{}", "===== UDEV-AUDIT =====".bold().cyan());
-    
+
     // I2C Audit
     if args.i2c || scan_all {
         let i2c_buses = audit_all_i2c_buses(args.hw_probe)?;

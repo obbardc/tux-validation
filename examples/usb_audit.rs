@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::fs;
-use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
 use tux_validation::config::Config;
+use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
