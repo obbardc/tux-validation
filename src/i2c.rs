@@ -315,45 +315,48 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
 
         // Perform hardware probe
         let scanner = LinuxI2cScanner { bus_id };
-        let (unbound_hw, bound_hw) = if enable_hw_probe {
-            scanner.scan_hw_probe()?
+        let hw_probe_results = if enable_hw_probe {
+            Some(scanner.scan_hw_probe()?)
         } else {
-            (Vec::new(), Vec::new())
+            None
         };
 
         // Cross-reference with udev inventory
         for dev in devices {
             if let Some(mut t_dev) = TuxDevice::from_udev(&dev) {
                 if let Some(addr) = t_dev.address.as_i2c_address() {
-                    t_dev.status.hw_responding =
-                        Some(bound_hw.contains(&addr) || unbound_hw.contains(&addr));
+                    t_dev.status.hw_responding = hw_probe_results.as_ref().map(|(unbound, bound)| {
+                        bound.contains(&addr) || unbound.contains(&addr)
+                    });
                 }
                 bus_node.devices.push(t_dev);
             }
         }
 
         // Find ghosts (In HW but not in udev)
-        for addr in unbound_hw {
-            if !bus_node
-                .devices
-                .iter()
-                .any(|d| d.address.as_i2c_address().unwrap() == addr)
-            {
-                bus_node.devices.push(TuxDevice {
-                    name: String::from("Unknown"),
-                    address: DeviceAddress::I2c {
-                        bus: bus_id,
-                        address: addr,
-                    },
-                    status: DeviceStatus {
-                        in_udev: false,
-                        hw_responding: Some(true),
-                        driver_bound: None,
-                    },
-                    details: DeviceDetails::I2c(I2cProperties),
-                    children: Vec::new(),
-                    attributes: HashMap::new(),
-                });
+        if let Some((unbound_hw, _bound_hw)) = hw_probe_results {
+            for addr in unbound_hw {
+                if !bus_node
+                    .devices
+                    .iter()
+                    .any(|d| d.address.as_i2c_address().unwrap() == addr)
+                {
+                    bus_node.devices.push(TuxDevice {
+                        name: String::from("Unknown"),
+                        address: DeviceAddress::I2c {
+                            bus: bus_id,
+                            address: addr,
+                        },
+                        status: DeviceStatus {
+                            in_udev: false,
+                            hw_responding: Some(true),
+                            driver_bound: None,
+                        },
+                        details: DeviceDetails::I2c(I2cProperties),
+                        children: Vec::new(),
+                        attributes: HashMap::new(),
+                    });
+                }
             }
         }
 
