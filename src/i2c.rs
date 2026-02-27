@@ -400,8 +400,8 @@ fn audit_i2c_device(dev: &TuxDevice, blueprint: &[I2cExpectation]) {
                         println!("    ┗━ Driver {} - expected (HW: {})", 
                             driver.green().bold(), hw_resp);
                     } else {
-                        println!("    ┗━ Driver {}- expected {} (HW: {})", 
-                            driver.red().bold(), req_driver.cyan(), hw_resp);
+                        println!("    ┗━ Driver {} - expected {} (HW: {})", 
+                            driver.red().bold(), req_driver.red(), hw_resp);
                     }
                 } else {
                     println!("    ┗━ Driver: {} (HW: {})", driver.blue().bold(), hw_resp);
