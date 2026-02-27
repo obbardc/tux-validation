@@ -131,7 +131,6 @@ fn build_usb_tree(current_udev: &udev::Device, pool: &[udev::Device]) -> Result<
 ///
 /// Optionally prints ID_SERIAL property from udev.
 pub fn print_and_verify_usb(buses: &[TuxBus], blueprint: &[UsbExpectation], serial: bool) {
-    println!("{}", "\n=== USB SUBSYSTEM ===".bold().cyan());
     for bus in buses {
         println!("\n{} (Bus {})", "Bus Controller".bold(), bus.id.yellow());
         for device in &bus.devices {
