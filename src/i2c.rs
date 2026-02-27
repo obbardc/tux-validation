@@ -1,9 +1,10 @@
+use crate::config::I2cExpectation;
 use crate::device::{
     BusStatus, DeviceAddress, DeviceDetails, DeviceStatus, I2cProperties, Subsystem, TuxBus,
     TuxDevice,
 };
-use crate::config::I2cExpectation;
 use anyhow::Result;
+use colored::*;
 use i2cdev::core::*;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use nix::errno::Errno;
@@ -11,7 +12,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use udev::Enumerator;
-use colored::*;
 
 /// Finds all available i2c devices in /dev.
 ///
@@ -325,9 +325,9 @@ pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>>
         for dev in devices {
             if let Some(mut t_dev) = TuxDevice::from_udev(&dev) {
                 if let Some(addr) = t_dev.address.as_i2c_address() {
-                    t_dev.status.hw_responding = hw_probe_results.as_ref().map(|(unbound, bound)| {
-                        bound.contains(&addr) || unbound.contains(&addr)
-                    });
+                    t_dev.status.hw_responding = hw_probe_results
+                        .as_ref()
+                        .map(|(unbound, bound)| bound.contains(&addr) || unbound.contains(&addr));
                 }
                 bus_node.devices.push(t_dev);
             }
@@ -372,7 +372,9 @@ pub fn print_and_verify_i2c(buses: &[TuxBus], blueprint: &[I2cExpectation]) {
     println!("\n{}", "=== I2C SUBSYSTEM ===".bold().cyan());
     for bus in buses {
         // Skip empty buses for cleaner output
-        if bus.devices.is_empty() { continue; }
+        if bus.devices.is_empty() {
+            continue;
+        }
 
         println!("\n{} (Bus {})", "I2C Bus".bold(), bus.id.yellow());
         for device in &bus.devices {
@@ -384,11 +386,17 @@ pub fn print_and_verify_i2c(buses: &[TuxBus], blueprint: &[I2cExpectation]) {
 fn audit_i2c_device(dev: &TuxDevice, blueprint: &[I2cExpectation]) {
     if let DeviceAddress::I2c { bus, address } = &dev.address {
         // Match against blueprint
-        let expectation = blueprint.iter().find(|e| e.bus == *bus && e.parsed_address() == Some(*address));
-        
-        let icon = if expectation.is_some() { "★".yellow() } else { "•".white() };
+        let expectation = blueprint
+            .iter()
+            .find(|e| e.bus == *bus && e.parsed_address() == Some(*address));
+
+        let icon = if expectation.is_some() {
+            "★".yellow()
+        } else {
+            "•".white()
+        };
         let addr_str = format!("0x{:02x}", address);
-        
+
         // Print base device line
 
         let driver = dev.status.driver_bound.as_deref().unwrap_or("none");
@@ -401,21 +409,38 @@ fn audit_i2c_device(dev: &TuxDevice, blueprint: &[I2cExpectation]) {
         // Verification Logic
         match expectation {
             Some(exp) => {
-                println!("  {} {} [{}]", icon, dev.name.cyan(), addr_str.green().dimmed());
+                println!(
+                    "  {} {} [{}]",
+                    icon,
+                    dev.name.cyan(),
+                    addr_str.green().dimmed()
+                );
                 if let Some(req_driver) = &exp.required_driver {
                     if req_driver == driver {
-                        println!("    ┗━ Driver {} - expected{}", 
-                            driver.green().bold(), hw_resp);
+                        println!(
+                            "    ┗━ Driver {} - expected{}",
+                            driver.green().bold(),
+                            hw_resp
+                        );
                     } else {
-                        println!("    ┗━ Driver {} - expected {}{}", 
-                            driver.red().bold(), req_driver.red(), hw_resp);
+                        println!(
+                            "    ┗━ Driver {} - expected {}{}",
+                            driver.red().bold(),
+                            req_driver.red(),
+                            hw_resp
+                        );
                     }
                 } else {
                     println!("    ┗━ Driver: {}{}", driver.blue().bold(), hw_resp);
                 }
-            },
+            }
             None => {
-                println!("  {} {} [{}]", icon, dev.name.cyan(), addr_str.red().dimmed());
+                println!(
+                    "  {} {} [{}]",
+                    icon,
+                    dev.name.cyan(),
+                    addr_str.red().dimmed()
+                );
                 println!("    ┗━ Driver: {}{}", driver.blue().bold(), hw_resp);
             }
         }

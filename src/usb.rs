@@ -1,8 +1,8 @@
+use crate::config::UsbExpectation;
 use crate::device::{
     BusStatus, DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface,
     UsbProperties,
 };
-use crate::config::{UsbExpectation};
 use anyhow::Result;
 use colored::*;
 use std::collections::HashMap;
