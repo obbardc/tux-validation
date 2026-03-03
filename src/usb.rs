@@ -236,7 +236,7 @@ fn audit_recursive(dev: &TuxDevice, depth: usize, blueprint: &[UsbExpectation], 
 }
 
 /// Checks if expected USB speed is equal or larger than the actual one.
-fn verify_speed(actual: &str, expected_min: &str) -> bool {
+pub fn verify_speed(actual: &str, expected_min: &str) -> bool {
     let speed_to_val = |s: &str| -> u32 {
         // Strip everything that isn't a digit (like "M" or "Mbps")
         let cleaned = s.trim_end_matches(|c: char| !c.is_numeric());
