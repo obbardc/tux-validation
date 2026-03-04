@@ -153,9 +153,14 @@ pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> AuditSta
 }
 
 /// Generates a junit report object and writes it in XML format.
-pub fn generate_junit_xml(results: &[ValidationResult], filepath: &str) -> anyhow::Result<()> {
+pub fn generate_junit_xml(results: &[ValidationResult], scan_duration: Option<CoreDuration>, filepath: &str) -> anyhow::Result<()> {
     let mut report = Report::new();
     let mut suite = TestSuite::new("Hardware Audit");
+
+    if let Some(duration) = scan_duration {
+        let scan_time = JunitDuration::try_from(duration).unwrap_or_else(|_| JunitDuration::milliseconds(1));
+        suite.add_testcase(TestCase::success("System: Hardware Discovery (Scan)", scan_time));
+    }
 
     for res in results {
         let test_name = format!("[{}] {}", res.subsystem, res.item_name);
