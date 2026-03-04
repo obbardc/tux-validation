@@ -1,15 +1,17 @@
 use crate::device::{TuxBus, TuxDevice, DeviceAddress, DeviceDetails};
 use crate::config::UsbExpectation;
 use crate::usb::verify_speed;
+use junit_report::{TestCase, TestSuite, Report, Duration as JunitDuration};
+use std::time::{Duration as CoreDuration, Instant};
 
-// A generic way to identify what hardware a particular test was looking for
+/// A generic way to identify what hardware a particular test was looking for
 #[derive(Debug, Clone, PartialEq)]
 pub enum TargetId {
     Usb { vid: String, pid: String },
     I2c { bus: u8, address: u16 },
 }
 
-// The outcome of a single expectation check
+/// The outcome of a single expectation check
 #[derive(Debug, Clone)]
 pub enum AuditStatus {
     Pass,
@@ -17,7 +19,7 @@ pub enum AuditStatus {
     Missing { reason: String }, // Hardware wasn't found at all
 }
 
-// The complete record of a test case
+/// The complete record of a test case
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
     pub subsystem: String,      // e.g., "USB" or "I2C"
@@ -25,6 +27,7 @@ pub struct ValidationResult {
     pub target_id: TargetId,
     pub location: String,       // e.g., "Bus 3, Port 3-1.4"
     pub status: AuditStatus,
+    pub duration: CoreDuration,
 }
 
 /// Evaluates provided USB configuration against detected hardware
@@ -35,6 +38,7 @@ pub fn evaluate_usb_blueprint(
     let mut results = Vec::new();
 
     for exp in blueprint {
+        let start_time = Instant::now();
         // Search the TuxBus tree for a particular device
         let found_device = find_usb_device(buses, &exp.vid, &exp.pid);
 
@@ -49,6 +53,8 @@ pub fn evaluate_usb_blueprint(
             }
         };
 
+        let elapsed_time = start_time.elapsed();
+
         results.push(ValidationResult {
             subsystem: "USB".to_string(),
             item_name: exp.name.clone(),
@@ -58,6 +64,7 @@ pub fn evaluate_usb_blueprint(
             },
             location: exp.expected_port.clone(),
             status,
+            duration: elapsed_time
         });
     }
 
@@ -143,4 +150,30 @@ pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> AuditSta
             actual_value: format!("Port: {}, Speed: {}", dev_port, props.speed),
         }
     }
+}
+
+/// Generates a junit report object and writes it in XML format.
+pub fn generate_junit_xml(results: &[ValidationResult], filepath: &str) -> anyhow::Result<()> {
+    let mut report = Report::new();
+    let mut suite = TestSuite::new("Hardware Audit");
+
+    for res in results {
+        let test_name = format!("[{}] {}", res.subsystem, res.item_name);
+        
+        let test_time = JunitDuration::try_from(res.duration)
+            .unwrap_or_else(|_| JunitDuration::milliseconds(1));
+
+        let case = match &res.status {
+            AuditStatus::Pass => TestCase::success(&test_name, test_time),
+            AuditStatus::Fail { reason, .. } | AuditStatus::Missing { reason } => {
+                TestCase::failure(&test_name, test_time, "HardwareError", reason)
+            }
+        };
+        suite.add_testcase(case);
+    }
+
+    report.add_testsuite(suite);
+    let mut file = std::fs::File::create(filepath)?;
+    report.write_xml(&mut file)?;
+    Ok(())
 }
