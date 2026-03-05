@@ -19,6 +19,15 @@ pub enum AuditStatus {
     Missing { reason: String }, // Hardware wasn't found at all
 }
 
+/// Information about each tested field
+#[derive(Debug, Clone)]
+pub struct FieldCheck {
+    pub name: String,
+    pub passed: bool,
+    pub expected: String,
+    pub actual: String,
+}
+
 /// The complete record of a test case
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
@@ -27,6 +36,7 @@ pub struct ValidationResult {
     pub target_id: TargetId,
     pub location: String,       // e.g., "Bus 3, Port 3-1.4"
     pub status: AuditStatus,
+    pub checks: Vec<FieldCheck>,
     pub duration: CoreDuration,
 }
 
@@ -42,14 +52,14 @@ pub fn evaluate_usb_blueprint(
         // Search the TuxBus tree for a particular device
         let found_device = find_usb_device(buses, &exp.vid, &exp.pid);
 
-        let status = match found_device {
+        let (status, checks) = match found_device {
             Some(dev) => {
                 verify_usb_constraints(dev, exp) 
             },
             None => {
-                AuditStatus::Missing { 
+                (AuditStatus::Missing { 
                     reason: format!("Device [{}:{}] not found on system", exp.vid, exp.pid) 
-                }
+                }, Vec::new())
             }
         };
 
@@ -64,6 +74,7 @@ pub fn evaluate_usb_blueprint(
             },
             location: exp.expected_port.clone(),
             status,
+            checks,
             duration: elapsed_time
         });
     }
@@ -102,54 +113,95 @@ fn search_tree<'a>(dev: &'a TuxDevice, vid: &str, pid: &str) -> Option<&'a TuxDe
 }
 
 /// Verifies whether (and to what extent) detected device corresponds to requested configuration
-pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> AuditStatus {
-    let mut errors = Vec::new();
+/// Returns AuditStatus and vector of FieldCheck objects.
+pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> (AuditStatus, Vec<FieldCheck>) {
+    let mut checks = Vec::new();
 
     let dev_port = match &dev.address {
         DeviceAddress::Usb { port_path, .. } => port_path,
-        _ => return AuditStatus::Fail { 
+        _ => return (AuditStatus::Fail { 
             reason: "Device is not a USB device".into(), actual_value: "".into() 
-        },
+        }, checks),
     };
 
     let props = match &dev.details {
         DeviceDetails::Usb(p) => p,
-        _ => return AuditStatus::Fail { 
+        _ => return (AuditStatus::Fail { 
             reason: "Missing USB properties".into(), actual_value: "".into() 
-        },
+        }, checks),
     };
 
     // Check physical port
-    if *dev_port != exp.expected_port {
-        errors.push(format!("Port mismatch (Expected: {}, Got: {})", exp.expected_port, dev_port));
-    }
+    let port_match = *dev_port != exp.expected_port;
+    checks.push(FieldCheck {
+        name: "Port".to_string(),
+        passed: port_match,
+        expected: exp.expected_port.clone(),
+        actual: dev_port.to_string(),
+    });
 
     // Check speed
     if let Some(expected_speed) = &exp.min_speed {
-        if !verify_speed(&props.speed, expected_speed) {
-            errors.push(format!("Speed too low (Expected: {}M, Got: {}M)", expected_speed, props.speed));
-        }
+        let speed_match = verify_speed(&props.speed, expected_speed);
+        checks.push(FieldCheck {
+            name: "Speed".to_string(),
+            passed: speed_match,
+            expected: expected_speed.clone(),
+            actual: props.speed.clone(),
+        });
     }
 
     // Check driver binding
     // Check if at least one interface is bound to the required driver.
-    let driver_found = props.interfaces.iter().any(|iface| {
+    if let Some(relevant_iface) = props.interfaces.iter().find(|iface| {
         iface.driver.as_deref().unwrap_or("None") == exp.required_driver
-    });
-
-    if !driver_found {
-        errors.push(format!("Driver '{}' not bound to any interface", exp.required_driver));
+    }){
+        checks.push(FieldCheck {
+            name: "Driver".to_string(),
+            passed: true,
+            expected: exp.required_driver.clone(),
+            actual: relevant_iface.driver.as_deref().unwrap_or("None").to_string(),
+        });
+    } else {
+        // If none matching the requirement, collect the names of all drivers currently bound to this device's interfaces
+        let bound_drivers: Vec<String> = props.interfaces.iter()
+            .map(|iface| iface.driver.as_deref().unwrap_or("None").to_string())
+            .collect();
+            
+        // Join them with a comma, or provide a fallback if there are 0 interfaces
+        let actual_str = if bound_drivers.is_empty() {
+            "No interfaces found".to_string()
+        } else {
+            bound_drivers.join(", ")
+        };
+        checks.push(FieldCheck {
+            name: "Driver".to_string(),
+            passed: false,
+            expected: exp.required_driver.clone(),
+            actual: actual_str,
+        });
     }
 
-    if errors.is_empty() {
+    // If ANY check failed, the whole test fails.
+    let all_passed = checks.iter().all(|c| c.passed);
+    
+    let status = if all_passed {
         AuditStatus::Pass
     } else {
-        AuditStatus::Fail {
-            // Join all errors with a separator
-            reason: errors.join(" | "), 
-            actual_value: format!("Port: {}, Speed: {}", dev_port, props.speed),
+        // Build a summary of the failed checks for the XML
+        let failed_msgs: Vec<String> = checks.iter()
+            .filter(|c| !c.passed)
+            .map(|c| format!("{} mismatch (Expected: {}, Got: {})", c.name, c.expected, c.actual))
+            .collect();
+            
+        AuditStatus::Fail { 
+            reason: failed_msgs.join(" | "), 
+            actual_value: "See reason".to_string() 
         }
-    }
+    };
+
+    (status, checks)
+
 }
 
 /// Generates a junit report object and writes it in XML format.
