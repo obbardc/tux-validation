@@ -15,6 +15,10 @@ struct Args {
 
     /// Audit USB Subsystem
     #[arg(long)]
+    xml_report: Option<String>,
+
+    /// Audit USB Subsystem
+    #[arg(long)]
     usb: bool,
 
     /// Audit I2C Subsystem
@@ -59,7 +63,9 @@ fn main() -> anyhow::Result<()> {
         let usb_scan_duration = usb_start.elapsed();
         //print_and_verify_usb(&usb_buses, &config.usb_devices, args.serial);
         let usb_results = evaluate_usb_blueprint(&usb_buses, &config.usb_devices);
-        generate_junit_xml(&usb_results, "./", Some(usb_scan_duration))?;
+        if let Some(filepath) = args.xml_report {
+            generate_junit_xml(&usb_results, &filepath, Some(usb_scan_duration))?;
+        }
         print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
     }
 
