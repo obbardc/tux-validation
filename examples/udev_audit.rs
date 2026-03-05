@@ -1,9 +1,11 @@
 use clap::Parser;
 use colored::*;
 use std::fs;
+use std::time::Instant;
 use tux_validation::config::Config;
 use tux_validation::i2c::{audit_all_i2c_buses, print_and_verify_i2c};
 use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
+use tux_validation::report::{evaluate_usb_blueprint, generate_junit_xml, print_annotated_usb_tree};
 
 #[derive(Parser)]
 #[command(author, version, about = "udev Subsystems Audit")]
@@ -52,8 +54,13 @@ fn main() -> anyhow::Result<()> {
 
     // USB Audit
     if args.usb || scan_all {
+        let usb_start = Instant::now();
         let usb_buses = audit_usb_subsystem()?;
-        print_and_verify_usb(&usb_buses, &config.usb_devices, args.serial);
+        let usb_scan_duration = usb_start.elapsed();
+        //print_and_verify_usb(&usb_buses, &config.usb_devices, args.serial);
+        let usb_results = evaluate_usb_blueprint(&usb_buses, &config.usb_devices);
+        generate_junit_xml(&usb_results, "./", Some(usb_scan_duration))?;
+        print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
     }
 
     Ok(())
