@@ -133,7 +133,7 @@ pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> (AuditSt
     };
 
     // Check physical port
-    let port_match = *dev_port != exp.expected_port;
+    let port_match = *dev_port == exp.expected_port;
     checks.push(FieldCheck {
         name: "Port".to_string(),
         passed: port_match,
