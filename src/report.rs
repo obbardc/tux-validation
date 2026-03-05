@@ -1,6 +1,7 @@
-use crate::device::{TuxBus, TuxDevice, DeviceAddress, DeviceDetails};
+use crate::device::{TuxBus, TuxDevice, DeviceAddress, DeviceDetails, UsbInterface};
 use crate::config::UsbExpectation;
 use crate::usb::verify_speed;
+use colored::{Colorize};
 use junit_report::{TestCase, TestSuite, Report, Duration as JunitDuration};
 use std::time::{Duration as CoreDuration, Instant};
 
@@ -205,7 +206,7 @@ pub fn verify_usb_constraints(dev: &TuxDevice, exp: &UsbExpectation) -> (AuditSt
 }
 
 /// Generates a junit report object and writes it in XML format.
-pub fn generate_junit_xml(results: &[ValidationResult], scan_duration: Option<CoreDuration>, filepath: &str) -> anyhow::Result<()> {
+pub fn generate_junit_xml(results: &[ValidationResult], filepath: &str, scan_duration: Option<CoreDuration>) -> anyhow::Result<()> {
     let mut report = Report::new();
     let mut suite = TestSuite::new("Hardware Audit");
 
@@ -234,3 +235,125 @@ pub fn generate_junit_xml(results: &[ValidationResult], scan_duration: Option<Co
     report.write_xml(&mut file)?;
     Ok(())
 }
+
+///Prints annotated USB tree with detected devices and interfaces
+pub fn print_annotated_usb_tree(buses: &[TuxBus], results: &[ValidationResult], print_serial: bool) {
+    println!("\n{}", "=== USB SUBSYSTEM ===".bold().cyan());
+    for bus in buses {
+        println!("\n{} (Bus {})", "Bus Controller".bold(), bus.id.yellow());
+        for dev in &bus.devices {
+            print_recursive_node(dev, results, 0, print_serial); 
+        }
+    }
+}
+
+fn print_recursive_node(dev: &TuxDevice, results: &[ValidationResult], depth: usize, print_serial: bool) {
+    let indent = "  ".repeat(depth);
+    // Check dev is a USB device and extract necessary parameters
+    if let DeviceDetails::Usb(dev_props) = &dev.details
+        && let DeviceAddress::Usb {
+            vid,
+            pid,
+            port_path,
+            ..
+        } = &dev.address
+    {
+        let test_result = results.iter().find(|res| {
+            match &res.target_id {
+                TargetId::Usb{vid:res_vid, pid:res_pid} => {
+                    res_vid == vid && res_pid == pid 
+                },
+                _ => false,
+            }
+        });
+    
+        let mut speed_colored = dev_props.speed.blue().bold();
+        let mut port_colored = port_path.blue().dimmed();
+        let mut newline_colored = "•".white();
+        if let Some(res) = test_result {
+            // Select PASS/FAIL/DEFAULT colors based on checks results
+            let speed_check = res.checks.iter().find(|check| check.name == "Speed");
+            speed_colored = match speed_check {
+                Some(speed_checked) => if speed_checked.passed {
+                    dev_props.speed.green().bold()
+                } else {
+                    dev_props.speed.red().bold()
+                },
+                None => dev_props.speed.blue().bold()
+            };
+            let port_check = res.checks.iter().find(|check| check.name == "Port");
+            port_colored = match port_check {
+                Some(port_checked) => if port_checked.passed {
+                    port_path.green().dimmed()
+                } else {
+                    port_path.red().dimmed()
+                },
+                None => port_path.blue().dimmed()
+            };
+            newline_colored = "★".yellow();
+        }
+        println!(
+            "{}{} {} [{}:{}] at {} ({}M)",
+            indent,
+            newline_colored,
+            dev.name.cyan(),
+            vid,
+            pid,
+            port_colored,
+            speed_colored,
+        );
+
+        // Optionally print ID_SERIAL property
+        if print_serial {
+            println!(
+                "{}    {} {}",
+                indent,
+                "ID:".dimmed(),
+                dev_props.serial_id.dimmed()
+            );
+        }
+        // Check and print interfaces data
+        for iface in &dev_props.interfaces {
+            print_usb_interface(iface, &indent, test_result);
+        }
+    }
+
+    // Recurse into hub children
+    for child in &dev.children {
+        print_recursive_node(child, results, depth + 1, print_serial);
+    }
+
+}
+
+fn print_usb_interface(iface: &UsbInterface, indent: &str, result: Option<&ValidationResult>) {
+    let class_name = match iface.class.as_str() {
+        "01" => "Audio",
+        "09" => "Hub",
+        "0e" => "Video",
+        "03" => "HID",
+        "ff" => "Vendor-Specific",
+        _ => &iface.class,
+    };
+    let dev_driver = iface.driver.as_deref().unwrap_or("none");
+    let mut driver_colored = dev_driver.blue().bold();
+    if let Some(res) = result {
+        let driver_check = res.checks.iter().find(|check| check.name == "Driver");
+        driver_colored = match driver_check {
+            Some(driver_checked) => if driver_checked.passed {
+                dev_driver.green().bold()
+            } else {
+                dev_driver.red().bold()
+            },
+            None => dev_driver.blue().bold()
+        };
+    }
+
+    println!(
+        "{}  ┗━ If {:02} [{}]: Driver {}",
+        indent,
+        iface.if_num,
+        class_name,
+        driver_colored,
+    );
+}
+

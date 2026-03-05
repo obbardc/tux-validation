@@ -8,6 +8,7 @@ pub struct Config {
     pub i2c_devices: Vec<I2cExpectation>,
 }
 
+//TODO: make all test fields optional?
 #[derive(Deserialize, Debug)]
 pub struct UsbExpectation {
     pub name: String,
