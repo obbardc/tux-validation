@@ -1,6 +1,7 @@
 use clap::Parser;
 use tux_validation::config::UsbExpectation;
-use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
+use tux_validation::report::{evaluate_usb_blueprint, print_annotated_usb_tree};
+use tux_validation::usb::audit_usb_subsystem;
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]
@@ -51,7 +52,8 @@ fn main() -> anyhow::Result<()> {
         println!("");
     }
 
-    print_and_verify_usb(&buses, &blueprint, args.serial);
+    let results = evaluate_usb_blueprint(&buses, &blueprint);
+    print_annotated_usb_tree(&buses, &results, args.serial);
 
     Ok(())
 }

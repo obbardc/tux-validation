@@ -1,6 +1,5 @@
 use crate::config::{I2cExpectation, UsbExpectation};
 use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, UsbInterface};
-use crate::usb::verify_speed;
 use colored::Colorize;
 use junit_report::{Duration as JunitDuration, Report, TestCase, TestSuite};
 use roxmltree::Document;
@@ -242,6 +241,19 @@ pub fn verify_usb_constraints(
     };
 
     (status, checks)
+}
+
+/// Checks if expected USB speed is equal or larger than the actual one.
+pub fn verify_speed(actual: &str, expected_min: &str) -> bool {
+    let speed_to_val = |s: &str| -> u32 {
+        // Strip everything that isn't a digit (like "M" or "Mbps")
+        let cleaned = s.trim_end_matches(|c: char| !c.is_numeric());
+
+        // Parse directly to u32. If it fails, return 0.
+        cleaned.parse::<u32>().unwrap_or(0)
+    };
+
+    speed_to_val(actual) >= speed_to_val(expected_min)
 }
 
 /// Evaluates provided I2C configuration against detected hardware
