@@ -1,7 +1,8 @@
 use clap::Parser;
 use tux_validation::config::UsbExpectation;
-use tux_validation::report::{evaluate_usb_blueprint, print_annotated_usb_tree};
+use tux_validation::report::print_annotated_usb_tree;
 use tux_validation::usb::audit_usb_subsystem;
+use tux_validation::validation::evaluate_usb_blueprint;
 
 #[derive(Parser)]
 #[command(author, version, about = "Performs USB subsystem audit.")]

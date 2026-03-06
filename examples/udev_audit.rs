@@ -5,10 +5,10 @@ use std::time::Instant;
 use tux_validation::config::Config;
 use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::report::{
-    evaluate_i2c_blueprint, evaluate_usb_blueprint, generate_junit_xml, print_annotated_i2c,
-    print_annotated_usb_tree, print_xml_summary,
+    generate_junit_xml, print_annotated_i2c, print_annotated_usb_tree, print_xml_summary,
 };
 use tux_validation::usb::audit_usb_subsystem;
+use tux_validation::validation::{evaluate_i2c_blueprint, evaluate_usb_blueprint};
 
 #[derive(Parser)]
 #[command(author, version, about = "udev Subsystems Audit")]
