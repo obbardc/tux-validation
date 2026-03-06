@@ -1,9 +1,11 @@
 use crate::device::{TuxBus, TuxDevice, DeviceAddress, DeviceDetails, UsbInterface};
 use crate::config::UsbExpectation;
 use crate::usb::verify_speed;
-use colored::{Colorize};
+use colored::Colorize;
 use junit_report::{TestCase, TestSuite, Report, Duration as JunitDuration};
 use std::time::{Duration as CoreDuration, Instant};
+use roxmltree::Document;
+use std::fs;
 
 /// A generic way to identify what hardware a particular test was looking for
 #[derive(Debug, Clone, PartialEq)]
@@ -357,3 +359,60 @@ fn print_usb_interface(iface: &UsbInterface, indent: &str, result: Option<&Valid
     );
 }
 
+/// Reads a JUnit XML file and prints a high-level summary to the terminal.
+pub fn print_xml_summary(filepath: &str) -> anyhow::Result<()> {
+    // Read the file into a string
+    let xml_str = fs::read_to_string(filepath)
+        .map_err(|e| anyhow::anyhow!("Failed to read XML file '{}': {}", filepath, e))?;
+
+    // Parse the XML stringm into a DOM tree representation
+    let doc = Document::parse(&xml_str)
+        .map_err(|e| anyhow::anyhow!("Failed to parse XML: {}", e))?;
+
+    let mut total_tests = 0;
+    let mut total_failures = 0;
+
+    // Walk the tree looking for <testcase> nodes
+    for node in doc.descendants() {
+        if node.has_tag_name("testcase") {
+            total_tests += 1;
+            
+            // Check if this testcase has a <failure> or <error> child
+            let has_failure = node.children().any(|c| {
+                c.has_tag_name("failure") || c.has_tag_name("error")
+            });
+
+            if has_failure {
+                total_failures += 1;
+            }
+        }
+    }
+
+    let passed = total_tests - total_failures;
+
+    // Print the condensed summary
+    println!("\n{}", "=== XML REPORT SUMMARY ===".bold().cyan());
+    println!("File:  {}", filepath.dimmed());
+    println!("Total: {}", total_tests);
+    
+    if passed > 0 {
+        println!("Pass:  {}", passed.to_string().green().bold());
+    } else {
+        println!("Pass:  {}", passed);
+    }
+
+    if total_failures > 0 {
+        println!("Fail:  {}", total_failures.to_string().red().bold());
+    } else {
+        println!("Fail:  {}", total_failures);
+    }
+
+    // Add a final status banner
+    if total_failures == 0 && total_tests > 0 {
+        println!("\n{}", "ALL TESTS PASSED".green().bold());
+    } else if total_failures > 0 {
+        println!("\n{}", "SOME TESTS FAILED".red().bold());
+    }
+
+    Ok(())
+}
