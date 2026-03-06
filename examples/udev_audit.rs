@@ -3,9 +3,10 @@ use colored::*;
 use std::fs;
 use std::time::Instant;
 use tux_validation::config::Config;
-use tux_validation::i2c::{audit_all_i2c_buses, print_and_verify_i2c};
+use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::report::{
-    evaluate_usb_blueprint, generate_junit_xml, print_annotated_usb_tree, print_xml_summary,
+    evaluate_i2c_blueprint, evaluate_usb_blueprint, generate_junit_xml, print_annotated_i2c,
+    print_annotated_usb_tree, print_xml_summary,
 };
 use tux_validation::usb::audit_usb_subsystem;
 
@@ -57,8 +58,18 @@ fn main() -> anyhow::Result<()> {
 
     // I2C Audit
     if args.i2c || scan_all {
+        let i2c_start = Instant::now();
         let i2c_buses = audit_all_i2c_buses(args.hw_probe)?;
-        print_and_verify_i2c(&i2c_buses, &config.i2c_devices);
+        let i2c_scan_duration = i2c_start.elapsed();
+        let i2c_results = evaluate_i2c_blueprint(&i2c_buses, &config.i2c_devices);
+        print_annotated_i2c(&i2c_buses, &i2c_results);
+        if let Some(filepath) = args.xml_report.clone() {
+            generate_junit_xml(&i2c_results, &filepath, Some(i2c_scan_duration))?;
+            if args.xml_summary {
+                print_xml_summary(&filepath)?;
+            }
+        }
+        //print_and_verify_i2c(&i2c_buses, &config.i2c_devices);
     }
 
     // USB Audit

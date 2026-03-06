@@ -522,6 +522,63 @@ fn print_usb_interface(iface: &UsbInterface, indent: &str, result: Option<&Valid
     );
 }
 
+pub fn print_annotated_i2c(buses: &[TuxBus], results: &[ValidationResult]) {
+    println!("\n{}", "=== I2C SUBSYSTEM ===".bold().cyan());
+    for bus in buses {
+        // Skip empty buses for cleaner output
+        if bus.devices.is_empty() {
+            continue;
+        }
+
+        println!("\n{} (Bus {})", "I2C Bus".bold(), bus.id.yellow());
+        for dev in &bus.devices {
+            print_i2c_device(dev, results);
+        }
+    }
+}
+
+fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
+    // Check dev is a I2C device and extract necessary parameters
+    if let DeviceAddress::I2c { bus, address } = &dev.address {
+        let test_result = results.iter().find(|res| match &res.target_id {
+            TargetId::I2c {
+                bus: res_bus,
+                address: res_address,
+            } => res_bus == bus && res_address == address,
+            _ => false,
+        });
+
+        let addr_str = format!("0x{:02x}", address);
+        let driver = dev.status.driver_bound.as_deref().unwrap_or("none");
+        let hw_resp = match dev.status.hw_responding {
+            Some(true) => format!(" (HW: {})", "ACK".green().bold()),
+            Some(false) => format!(" (HW: {})", "NACK".red().bold()),
+            None => "".to_string(), // Silently omit if we didn't probe
+        };
+
+        let addr_colored = addr_str.blue().dimmed();
+        let dev_name_colored = dev.name.cyan();
+        let (driver_colored, newline_colored) = if let Some(res) = test_result {
+            let driver_check = res.checks.iter().find(|check| check.name == "Driver");
+            let d_color = match driver_check {
+                Some(check) if check.passed => driver.green().bold(),
+                Some(_) => driver.red().bold(),
+                None => driver.blue().bold(),
+            };
+
+            (d_color, "★".yellow())
+        } else {
+            // The defaults if no test result is found
+            (driver.blue().bold(), "•".white())
+        };
+        println!(
+            "  {} {} [{}]",
+            newline_colored, dev_name_colored, addr_colored
+        );
+        println!("    ┗━ Driver: {}{}", driver_colored, hw_resp);
+    }
+}
+
 /// Reads a JUnit XML file and prints a high-level summary to the terminal.
 pub fn print_xml_summary(filepath: &str) -> anyhow::Result<()> {
     // Read the file into a string
