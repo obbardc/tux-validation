@@ -1,14 +1,16 @@
 use clap::Parser;
 use colored::*;
 use std::fs;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tux_validation::config::Config;
 use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::report::{
     generate_junit_xml, print_annotated_i2c, print_annotated_usb_tree, print_xml_summary,
 };
 use tux_validation::usb::audit_usb_subsystem;
-use tux_validation::validation::{evaluate_i2c_blueprint, evaluate_usb_blueprint};
+use tux_validation::validation::{
+    ValidationResult, evaluate_i2c_blueprint, evaluate_usb_blueprint,
+};
 
 #[derive(Parser)]
 #[command(author, version, about = "udev Subsystems Audit")]
@@ -57,33 +59,34 @@ fn main() -> anyhow::Result<()> {
     println!("\n{}", "===== UDEV-AUDIT =====".bold().cyan());
 
     // I2C Audit
+    let mut i2c_results: Vec<ValidationResult> = Vec::new();
+    let mut i2c_scan_duration = Duration::ZERO;
     if args.i2c || scan_all {
         let i2c_start = Instant::now();
         let i2c_buses = audit_all_i2c_buses(args.hw_probe)?;
-        let i2c_scan_duration = i2c_start.elapsed();
-        let i2c_results = evaluate_i2c_blueprint(&i2c_buses, &config.i2c_devices);
+        i2c_scan_duration = i2c_start.elapsed();
+        i2c_results = evaluate_i2c_blueprint(&i2c_buses, &config.i2c_devices);
         print_annotated_i2c(&i2c_buses, &i2c_results);
-        if let Some(filepath) = args.xml_report.clone() {
-            generate_junit_xml(&i2c_results, &filepath, Some(i2c_scan_duration))?;
-            if args.xml_summary {
-                print_xml_summary(&filepath)?;
-            }
-        }
-        //print_and_verify_i2c(&i2c_buses, &config.i2c_devices);
     }
 
     // USB Audit
+    let mut usb_results: Vec<ValidationResult> = Vec::new();
+    let mut usb_scan_duration = Duration::ZERO;
     if args.usb || scan_all {
         let usb_start = Instant::now();
         let usb_buses = audit_usb_subsystem()?;
-        let usb_scan_duration = usb_start.elapsed();
-        let usb_results = evaluate_usb_blueprint(&usb_buses, &config.usb_devices);
+        usb_scan_duration = usb_start.elapsed();
+        usb_results = evaluate_usb_blueprint(&usb_buses, &config.usb_devices);
         print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
-        if let Some(filepath) = args.xml_report {
-            generate_junit_xml(&usb_results, &filepath, Some(usb_scan_duration))?;
-            if args.xml_summary {
-                print_xml_summary(&filepath)?;
-            }
+    }
+
+    let all_results: Vec<ValidationResult> = usb_results.into_iter().chain(i2c_results).collect();
+
+    if let Some(filepath) = args.xml_report.clone() {
+        let total_scan_duration = usb_scan_duration + i2c_scan_duration;
+        generate_junit_xml(&all_results, &filepath, Some(total_scan_duration))?;
+        if args.xml_summary {
+            print_xml_summary(&filepath)?;
         }
     }
 
