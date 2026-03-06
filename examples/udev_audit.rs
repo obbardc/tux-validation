@@ -4,8 +4,8 @@ use std::fs;
 use std::time::Instant;
 use tux_validation::config::Config;
 use tux_validation::i2c::{audit_all_i2c_buses, print_and_verify_i2c};
-use tux_validation::usb::{audit_usb_subsystem, print_and_verify_usb};
-use tux_validation::report::{evaluate_usb_blueprint, generate_junit_xml, print_annotated_usb_tree};
+use tux_validation::usb::audit_usb_subsystem;
+use tux_validation::report::{evaluate_usb_blueprint, generate_junit_xml, print_annotated_usb_tree, print_xml_summary};
 
 #[derive(Parser)]
 #[command(author, version, about = "udev Subsystems Audit")]
@@ -16,6 +16,9 @@ struct Args {
     /// Audit USB Subsystem
     #[arg(long)]
     xml_report: Option<String>,
+
+    #[arg(long)]
+    xml_summary: bool,
 
     /// Audit USB Subsystem
     #[arg(long)]
@@ -61,12 +64,14 @@ fn main() -> anyhow::Result<()> {
         let usb_start = Instant::now();
         let usb_buses = audit_usb_subsystem()?;
         let usb_scan_duration = usb_start.elapsed();
-        //print_and_verify_usb(&usb_buses, &config.usb_devices, args.serial);
         let usb_results = evaluate_usb_blueprint(&usb_buses, &config.usb_devices);
+        print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
         if let Some(filepath) = args.xml_report {
             generate_junit_xml(&usb_results, &filepath, Some(usb_scan_duration))?;
+            if args.xml_summary {
+                print_xml_summary(&filepath)?;
+            }
         }
-        print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
     }
 
     Ok(())
