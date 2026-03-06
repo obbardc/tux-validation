@@ -108,10 +108,10 @@ fn search_tree<'a>(dev: &'a TuxDevice, vid: &str, pid: &str) -> Option<&'a TuxDe
         pid: dev_pid,
         ..
     } = &dev.address
+        && dev_vid == vid
+        && dev_pid == pid
     {
-        if dev_vid == vid && dev_pid == pid {
-            return Some(dev);
-        }
+        return Some(dev);
     }
 
     // Check children
