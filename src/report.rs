@@ -1,4 +1,4 @@
-use crate::config::UsbExpectation;
+use crate::config::{I2cExpectation, UsbExpectation};
 use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, UsbInterface};
 use crate::usb::verify_speed;
 use colored::Colorize;
@@ -214,6 +214,114 @@ pub fn verify_usb_constraints(
             passed: false,
             expected: exp.required_driver.clone(),
             actual: actual_str,
+        });
+    }
+
+    // If ANY check failed, the whole test fails.
+    let all_passed = checks.iter().all(|c| c.passed);
+
+    let status = if all_passed {
+        AuditStatus::Pass
+    } else {
+        // Build a summary of the failed checks for the XML
+        let failed_msgs: Vec<String> = checks
+            .iter()
+            .filter(|c| !c.passed)
+            .map(|c| {
+                format!(
+                    "{} mismatch (Expected: {}, Got: {})",
+                    c.name, c.expected, c.actual
+                )
+            })
+            .collect();
+
+        AuditStatus::Fail {
+            reason: failed_msgs.join(" | "),
+            actual_value: "See reason".to_string(),
+        }
+    };
+
+    (status, checks)
+}
+
+/// Evaluates provided I2C configuration against detected hardware
+pub fn evaluate_i2c_blueprint(
+    buses: &[TuxBus],
+    blueprint: &[I2cExpectation],
+) -> Vec<ValidationResult> {
+    let mut results = Vec::new();
+
+    for exp in blueprint {
+        let start_time = Instant::now();
+        let expected_addr = exp.parsed_address();
+        // Search the TuxBus tree for a particular device
+        let found_device =
+            if let Some(found_bus) = buses.iter().find(|bus| bus.id == exp.bus.to_string()) {
+                found_bus.devices.iter().find(|dev| {
+                    if let DeviceAddress::I2c { address, .. } = &dev.address {
+                        Some(*address) == expected_addr
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                None
+            };
+
+        let (status, checks) = match found_device {
+            Some(dev) => verify_i2c_constraints(dev, exp),
+            None => (
+                AuditStatus::Missing {
+                    reason: format!("Device [{}:{}] not found on system", exp.bus, exp.address),
+                },
+                Vec::new(),
+            ),
+        };
+
+        let elapsed_time = start_time.elapsed();
+
+        results.push(ValidationResult {
+            subsystem: "I2C".to_string(),
+            item_name: exp.name.clone(),
+            target_id: TargetId::I2c {
+                bus: exp.bus,
+                address: expected_addr.unwrap_or(0),
+            },
+            location: format!("{}-{}", exp.bus, exp.address),
+            status,
+            checks,
+            duration: elapsed_time,
+        });
+    }
+
+    results
+}
+
+/// Verifies whether (and to what extent) detected I2C device corresponds to requested configuration
+/// Returns AuditStatus and vector of FieldCheck objects.
+/// TODO: There is some boilerplate here and in verify_usb_constraints - need to refactor
+pub fn verify_i2c_constraints(
+    dev: &TuxDevice,
+    exp: &I2cExpectation,
+) -> (AuditStatus, Vec<FieldCheck>) {
+    let mut checks = Vec::new();
+
+    if let Some(hw_ack) = dev.status.hw_responding {
+        checks.push(FieldCheck {
+            name: "Hardware Probe".to_string(),
+            passed: hw_ack, // Fails if NACK
+            expected: "true".to_string(),
+            actual: hw_ack.to_string(),
+        });
+    }
+
+    let driver = dev.status.driver_bound.as_deref().unwrap_or("None");
+    if let Some(expected_driver) = &exp.required_driver {
+        checks.push(FieldCheck {
+            name: "Driver".to_string(),
+            passed: driver == expected_driver,
+            expected: expected_driver.clone(),
+            actual: driver.to_string(),
         });
     }
 
