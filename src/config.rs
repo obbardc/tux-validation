@@ -34,3 +34,12 @@ impl I2cExpectation {
         u16::from_str_radix(clean, 16).ok()
     }
 }
+
+#[derive(Deserialize, Debug)]
+pub struct EthernetExpectation {
+    pub interface_name: String,
+    pub link_status: bool,
+    pub speed: Option<u16>,
+    pub driver: Option<String>,
+    pub mac_address: Option<String>
+}
