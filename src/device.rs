@@ -23,6 +23,10 @@ pub enum DeviceAddress {
         vid: String,       // "046d"
         pid: String,       // "c05a"
     },
+    Ethernet {
+        interface: String, // e.g., "eth0"
+        mac: String,       // e.g., "00:1a:2b:3c:4d:5e"
+    },
     Pci {
         slot: String,
     }, // e.g. "00:02.0"
@@ -60,6 +64,7 @@ impl DeviceAddress {
 pub enum DeviceDetails {
     Usb(UsbProperties),
     I2c(I2cProperties),
+    Ethernet(EthernetProperties),
     None,
 }
 
@@ -81,6 +86,21 @@ pub struct UsbInterface {
 //TODO: need it?
 #[derive(Debug, Clone, Serialize)]
 pub struct I2cProperties;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EthernetProperties {
+    // --- Hardware Layer ---
+    pub speed: u32,           // 10, 100, 1000
+    pub duplex: String,       // "full", "half"
+    pub link_detected: bool,  // Physical Carrier
+    pub pci_bus_id: Option<String>,
+    // --- Software/Network Layer ---
+    pub operstate: String,    // "up", "down", "testing"
+    pub ipv4_address: Option<String>,
+    pub ipv6_address: Option<String>,
+    pub dhcp_enabled: bool,
+    pub firmware_version: Option<String>,
+}
 
 /// Device class
 #[derive(Debug, Clone, Serialize)]
@@ -124,6 +144,7 @@ impl TuxDevice {
     pub fn from_udev(dev: &udev::Device) -> Option<Self> {
         //TODO: might be better to use Visitor design pattern.
         let dev_sysname = dev.sysname().to_str()?;
+        let subsystem = dev.subsystem()?.to_str()?;
         let parent = dev.parent()?;
         let parent_sysname = parent.sysname().to_str()?;
         let address = if parent_sysname.starts_with("i2c-") {
@@ -150,14 +171,32 @@ impl TuxDevice {
                 vid: dev.attribute_value("idVendor")?.to_str()?.to_string(),
                 pid: dev.attribute_value("idProduct")?.to_str()?.to_string(),
             }
+        } else if subsystem == "net" {
+            let mac = dev.attribute_value("address")
+                .and_then(|v| v.to_str())
+                .unwrap_or("00:00:00:00:00:00")
+                .to_string();
+            
+            DeviceAddress::Ethernet {
+                interface: dev_sysname.to_string(),
+                mac,
+            }
         } else {
             return None;
         };
 
         // TODO: Should we be collecting all device attributes or this is not reasonable and
         //  then it's just easier to keep the udev::Device objects?
-
-        let driver = dev.driver().and_then(|s| s.to_str()).map(|s| s.to_string());
+        let driver = if let Some(d) = dev.driver() {
+            d.to_str().map(|s| s.to_string())
+        } else if subsystem == "net" {
+        // If we're in 'net', explicitly look at the parent
+            dev.parent().and_then(|parent| {
+                parent.driver().and_then(|d| d.to_str().map(|s| s.to_string()))
+            })
+        } else {
+            None
+        };
         let name = match &address {
             DeviceAddress::I2c { .. } => dev
                 .attribute_value("name")
@@ -171,10 +210,14 @@ impl TuxDevice {
                 .unwrap_or("Unknown USB Device")
                 .to_string(),
 
+            DeviceAddress::Ethernet { interface, .. } => interface.clone(),
+
             DeviceAddress::Pci { .. } => {
                 // To be elaborated later
                 "PCI Device".to_string()
-            }
+            },
+
+            _ => "Unknown Device".to_string(),
         };
 
         Some(TuxDevice {
