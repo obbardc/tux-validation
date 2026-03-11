@@ -1,5 +1,5 @@
-use crate::config::{I2cExpectation, UsbExpectation};
-use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice};
+use crate::config::{I2cExpectation, UsbExpectation, EthernetExpectation};
+use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, Subsystem};
 use std::time::{Duration as CoreDuration, Instant};
 
 /// A generic way to identify what hardware a particular test was looking for
@@ -7,6 +7,7 @@ use std::time::{Duration as CoreDuration, Instant};
 pub enum TargetId {
     Usb { vid: String, pid: String },
     I2c { bus: u8, address: u16 },
+    Ethernet { interface: String }
 }
 
 /// The outcome of a single expectation check
@@ -351,6 +352,142 @@ pub fn verify_i2c_constraints(
             })
             .collect();
 
+        AuditStatus::Fail {
+            reason: failed_msgs.join(" | "),
+            actual_value: "See reason".to_string(),
+        }
+    };
+
+    (status, checks)
+}
+
+pub fn evaluate_network_blueprint(
+    buses: &[TuxBus],
+    blueprint: &[EthernetExpectation],
+) -> Vec<ValidationResult> {
+    let mut results = Vec::new();
+
+    for exp in blueprint {
+        let start_time = std::time::Instant::now();
+        
+        // Find the device in the Net subsystem
+        let found_device = buses.iter()
+            .filter(|bus| bus.subsystem == Subsystem::Net)
+            .flat_map(|bus| &bus.devices)
+            .find(|dev| dev.name == exp.interface_name);
+
+        let (status, checks) = match found_device {
+            Some(dev) => verify_ethernet_constraints(dev, exp),
+            None => (
+                AuditStatus::Missing {
+                    reason: format!("Interface {} not found", exp.interface_name),
+                },
+                Vec::new(),
+            ),
+        };
+
+        results.push(ValidationResult {
+            subsystem: "Ethernet".to_string(),
+            item_name: exp.interface_name.clone(),
+            target_id: TargetId::Ethernet { interface: exp.interface_name.clone() },
+            location: exp.interface_name.clone(),
+            status,
+            checks,
+            duration: start_time.elapsed(),
+        });
+    }
+    results
+}
+
+fn verify_ethernet_constraints(
+    dev: &TuxDevice,
+    exp: &EthernetExpectation,
+) -> (AuditStatus, Vec<FieldCheck>) {
+    let mut checks = Vec::new();
+
+    let props = match &dev.details {
+        DeviceDetails::Ethernet(p) => p,
+        _ => return (AuditStatus::Fail { reason: "Device details mismatch".into(), actual_value: "".into() }, checks),
+    };
+
+    //MAC address
+    if let Some(expected_mac) = &exp.mac_address {
+        if let DeviceAddress::Ethernet { mac, .. } = &dev.address {
+            checks.push(FieldCheck {
+                name: "MAC Address".into(),
+                passed: mac.to_lowercase() == expected_mac.to_lowercase(),
+                expected: expected_mac.clone(),
+                actual: mac.clone(),
+            });
+        }
+    }
+
+    // Physical Link
+    checks.push(FieldCheck {
+        name: "Link Status".into(),
+        passed: props.link_detected == exp.link_status,
+        expected: exp.link_status.to_string(),
+        actual: props.link_detected.to_string(),
+    });
+
+    // Speed
+    if let Some(expected_speed) = exp.speed {
+        checks.push(FieldCheck {
+            name: "Speed".into(),
+            passed: props.speed >= expected_speed,
+            expected: format!("{}+ Mbps", expected_speed),
+            actual: format!("{} Mbps", props.speed),
+        });
+    }
+
+    // IPv4 Presence/DHCP
+    let has_any_v4 = !props.ipv4_address.is_empty();
+    let (ip_passed, expected_str, actual_str) = if let Some(target_ip) = &exp.expected_ip {
+        // We want a specific IP
+        let found = props.ipv4_address.iter().any(|addr| addr == target_ip);
+        (
+            found, 
+            target_ip.clone(), 
+            if has_any_v4 { props.ipv4_address.join(", ") } else { "None".into() }
+        )
+    } else {
+        // We just want ANY valid IP
+        (
+            has_any_v4, 
+            "Any valid IPv4".into(), 
+            if has_any_v4 { props.ipv4_address.join(", ") } else { "None".into() }
+        )
+    };
+    checks.push(FieldCheck {
+        name: "IPv4 Check".into(),
+        passed: ip_passed,
+        expected: expected_str,
+        actual: actual_str,
+    });
+
+    // Driver Check
+    if let Some(expected_driver) = &exp.driver {
+        let actual_driver = dev.status.driver_bound.as_deref().unwrap_or("None");
+        checks.push(FieldCheck {
+            name: "Driver".into(),
+            passed: actual_driver == expected_driver,
+            expected: expected_driver.clone(),
+            actual: actual_driver.into(),
+        });
+    }
+
+    let all_passed = checks.iter().all(|c| c.passed);
+    let status = if all_passed { AuditStatus::Pass } else { 
+        let failed_msgs: Vec<String> = checks
+            .iter()
+            .filter(|c| !c.passed)
+            .map(|c| {
+                format!(
+                    "{} mismatch (Expected: {}, Got: {})",
+                    c.name, c.expected, c.actual
+                )
+            })
+            .collect();
         AuditStatus::Fail {
             reason: failed_msgs.join(" | "),
             actual_value: "See reason".to_string(),
