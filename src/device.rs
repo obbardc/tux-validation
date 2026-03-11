@@ -114,7 +114,7 @@ pub struct TuxDevice {
     pub attributes: HashMap<String, String>, // Extra optional info
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub enum Subsystem {
     I2c,
     Usb,
@@ -134,7 +134,7 @@ pub enum BusStatus {
 /// Hardware group (bus/controller/adaptor) class
 pub struct TuxBus {
     pub name: String,         // e.g., "i2c-7"
-    pub subsystem: Subsystem, // Enum: I2c, Usb, Pci
+    pub subsystem: Subsystem, // e.g: Subsystem::I2c
     pub id: String,           // e.g. 7 as in i2c-7
     pub devices: Vec<TuxDevice>,
     pub status: BusStatus,                 // Is the controller itself healthy?

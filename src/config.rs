@@ -6,6 +6,8 @@ pub struct Config {
     pub usb_devices: Vec<UsbExpectation>,
     #[serde(default)]
     pub i2c_devices: Vec<I2cExpectation>,
+    #[serde(default)]
+    pub ethernet_devices: Vec<EthernetExpectation>,
 }
 
 //TODO: make all test fields optional?
@@ -39,7 +41,8 @@ impl I2cExpectation {
 pub struct EthernetExpectation {
     pub interface_name: String,
     pub link_status: bool,
-    pub speed: Option<u16>,
+    pub speed: Option<u32>,
     pub driver: Option<String>,
-    pub mac_address: Option<String>
+    pub mac_address: Option<String>,
+    pub expected_ip: Option<String>,
 }

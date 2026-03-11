@@ -6,4 +6,4 @@ pub mod report;
 pub mod usb;
 pub mod utils;
 pub mod validation;
-pub mod ethernet;
+pub mod network;
