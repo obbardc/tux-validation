@@ -1,4 +1,4 @@
-use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, UsbInterface};
+use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, UsbInterface, Subsystem};
 use crate::validation::{AuditStatus, TargetId, ValidationResult};
 use colored::Colorize;
 use junit_report::{Duration as JunitDuration, Report, TestCase, TestSuite};
@@ -230,6 +230,92 @@ fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
             newline_colored, dev_name_colored, addr_colored
         );
         println!("    ┗━ Driver: {}{}", driver_colored, hw_resp);
+    }
+}
+
+pub fn print_annotated_network(buses: &[TuxBus], results: &[ValidationResult]) {
+    println!("\n{}", "=== NETWORK SUBSYSTEM ===".bold().cyan());
+
+    //TODO: should apply filter to other subsystems too...
+    for bus in buses.iter().filter(|b| b.subsystem == Subsystem::Net) {
+        if bus.devices.is_empty() {
+            println!("  {}", "No network interfaces detected (excluding loopback).".yellow());
+            continue;
+        }
+
+        for dev in &bus.devices {
+            if let DeviceDetails::Ethernet(props) = &dev.details {
+                // Find the validation record for this interface
+                let res = results.iter().find(|r| {
+                    if let TargetId::Ethernet { interface } = &r.target_id {
+                        interface == &dev.name
+                    } else {
+                        false
+                    }
+                });
+
+                // Determine the bullet point icon and color based on overall status
+                let status_symbol = match res {
+                    Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
+                    Some(_) => "✖".red().bold(), // TODO: should I do the same for other devices?
+                    None => "•".white(),
+                };
+
+                // 1. Header: Interface Name and Physical Link Status
+                let link_text = if props.link_detected { "UP".green().bold() } else { "DOWN".red().bold() };
+                println!("  {} {} [{}]", status_symbol, dev.name.cyan(), link_text);
+
+                // 2. MAC Address Line
+                if let DeviceAddress::Ethernet { mac, .. } = &dev.address {
+                    let mut mac_colored = mac.blue().dimmed();
+                    if let Some(r) = res {
+                        if let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address") {
+                            mac_colored = if check.passed { mac.green().dimmed() } else { mac.red().dimmed() };
+                        }
+                    }
+                    println!("    ┣━ MAC:    {}", mac_colored);
+                }
+
+                // 3. Driver
+                let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
+                let mut driver_colored = driver_name.blue();
+                if let Some(r) = res {
+                    if let Some(check) = r.checks.iter().find(|c| c.name == "Driver") {
+                        driver_colored = if check.passed { driver_name.green().bold() } else { driver_name.red().bold() };
+                    }
+                }
+                println!("    ┣━ Driver: {}", driver_colored);
+
+                // 4. IP Addresses
+                if !props.ipv4_address.is_empty() {
+                    let ip_str = props.ipv4_address.join(", ");
+                    let mut ip_colored = ip_str.blue().dimmed();
+                    if let Some(r) = res {
+                        if let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check") {
+                            ip_colored = if check.passed { ip_str.green().dimmed() } else { ip_str.red().dimmed() };
+                        }
+                    }
+                    println!("    ┣━ IPv4:   {}", ip_colored);
+                } else {
+                    println!("    ┣━ IPv4:   {}", "none".yellow().dimmed());
+                }
+
+                // 5. Speed & Duplex
+                if props.link_detected {
+                    let speed_str = format!("{} Mbps", props.speed);
+                    let mut speed_colored = speed_str.blue();
+                    let duplex_colored = props.duplex.yellow();
+                    if let Some(r) = res {
+                        if let Some(check) = r.checks.iter().find(|c| c.name == "Speed") {
+                            speed_colored = if check.passed { speed_str.green().bold() } else { speed_str.red().bold() };
+                        }
+                    }
+                    println!("    ┗━ Config: {} ({})", speed_colored, duplex_colored);
+                } else {
+                    println!("    ┗━ Config: {}", "No Carrier".red().dimmed());
+                }
+            }
+        }
     }
 }
 
