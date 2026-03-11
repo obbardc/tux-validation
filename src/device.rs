@@ -65,6 +65,7 @@ pub enum DeviceDetails {
     Usb(UsbProperties),
     I2c(I2cProperties),
     Ethernet(EthernetProperties),
+//    Wifi(WifiProperties),
     None,
 }
 
@@ -96,8 +97,8 @@ pub struct EthernetProperties {
     pub pci_bus_id: Option<String>,
     // --- Software/Network Layer ---
     pub operstate: String,    // "up", "down", "testing"
-    pub ipv4_address: Option<String>,
-    pub ipv6_address: Option<String>,
+    pub ipv4_address: Vec<String>,
+    pub ipv6_address: Vec<String>,
     pub dhcp_enabled: bool,
     pub firmware_version: Option<String>,
 }
@@ -117,6 +118,7 @@ pub struct TuxDevice {
 pub enum Subsystem {
     I2c,
     Usb,
+    Net,
     Pci,
     Gpio,
 }
@@ -216,8 +218,6 @@ impl TuxDevice {
                 // To be elaborated later
                 "PCI Device".to_string()
             },
-
-            _ => "Unknown Device".to_string(),
         };
 
         Some(TuxDevice {
