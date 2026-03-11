@@ -86,9 +86,17 @@ fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
         
         if let Some(address) = ifaddr.address {
             if let Some(sockaddr) = address.as_sockaddr_in() {
-                v4_list.push(sockaddr.ip().to_string());
+                let ip = sockaddr.ip().to_string();
+                // Filter out APIPA (Link-Local) IPv4: 169.254.0.0/16; TODO: correct?
+                if !ip.starts_with("169.254.") {
+                    v4_list.push(ip);
+                }
             } else if let Some(sockaddr_v6) = address.as_sockaddr_in6() {
-                v6_list.push(sockaddr_v6.ip().to_string());
+                let ip = sockaddr_v6.ip().to_string();
+                // Filter out Link-Local IPv6: starts with fe80; TODO: correct?
+                if !ip.starts_with("fe80:") {
+                    v6_list.push(ip);
+                }
             }
         }
     }
