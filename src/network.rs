@@ -1,10 +1,11 @@
 use crate::device::{
-    BusStatus, DeviceDetails, EthernetProperties, WifiProperties, Subsystem, TuxBus, TuxDevice,
+    BusStatus, DeviceDetails, EthernetProperties, Subsystem, TuxBus, TuxDevice, WifiProperties,
 };
 use anyhow::Result;
+use neli_wifi::Socket;
 use nix::ifaddrs::getifaddrs;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use udev::Enumerator;
 
 pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
@@ -16,30 +17,42 @@ pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
     // Get IP addresses from the system
     let mut ip_map = get_interface_ips()?;
 
+    // Open Wifi socket
+    let mut wifi_socket = Socket::connect().ok();
+
     for dev in enumerator.scan_devices()? {
-        if dev.sysname() == "lo" { continue; }
+        if dev.sysname() == "lo" {
+            continue;
+        }
 
         // Check if it's a Wireless device
-        let is_wifi = dev.devtype().is_some_and(|t| t == "wlan") 
-               || dev.attribute_value("phy80211").is_some();
+        let is_wifi =
+            dev.devtype().is_some_and(|t| t == "wlan") || dev.attribute_value("phy80211").is_some();
 
         if let Some(mut tux_dev) = TuxDevice::from_udev(&dev) {
             // General properties
             // IP addresses
-            let (v4_addrs, v6_addrs) = ip_map.remove(&tux_dev.name)
-            .unwrap_or((Vec::new(), Vec::new()));
+            let (v4_addrs, v6_addrs) = ip_map
+                .remove(&tux_dev.name)
+                .unwrap_or((Vec::new(), Vec::new()));
 
             // Extract carrier state and treat it as hw probe
-            let carrier = dev.attribute_value("carrier")
-                .and_then(|v| v.to_str()) == Some("1");
+            let carrier = dev.attribute_value("carrier").and_then(|v| v.to_str()) == Some("1");
             tux_dev.status.hw_responding = Some(carrier);
 
             if is_wifi {
                 // Wifi
+                let (ssid, signal, freq) = wifi_socket
+                    .as_mut()
+                    .and_then(|sock| {
+                        // Query the specific interface by its name (e.g., "wlp0s20f3")
+                        get_wifi_meta(sock, &tux_dev.name).ok()
+                    })
+                    .unwrap_or((None, 0, 0)); // Fallback if query fails
                 tux_dev.details = DeviceDetails::Wifi(WifiProperties {
-                    ssid: dev.attribute_value("ssid").map(|s| s.to_string_lossy().into()), // Needs real Wifi tools for full depth, but udev sometimes has this
-                    signal_level: 0, // Placeholder: requires nl80211 for accuracy
-                    frequency: 0,    // Placeholder
+                    ssid,
+                    signal_level: signal,
+                    frequency: freq,
                     link_detected: carrier,
                     ipv4_address: v4_addrs,
                     ipv6_address: v6_addrs,
@@ -47,27 +60,32 @@ pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
             } else {
                 // Ethernet
                 // Extract extended properties from sysfs via udev attributes
-                let speed = dev.attribute_value("speed")
+                let speed = dev
+                    .attribute_value("speed")
                     .and_then(|v| v.to_str()?.parse::<u32>().ok())
                     .unwrap_or(0);
-            
-                let duplex = dev.attribute_value("duplex")
+
+                let duplex = dev
+                    .attribute_value("duplex")
                     .and_then(|v| v.to_str())
                     .unwrap_or("unknown")
                     .to_string();
 
-                let operstate = dev.attribute_value("operstate")
+                let operstate = dev
+                    .attribute_value("operstate")
                     .and_then(|v| v.to_str())
                     .unwrap_or("unknown")
                     .to_string();
 
-                let dhcp_on  = !v4_addrs.is_empty(); // This is heuristic: got a non-APIPA IP; TODO: always works?
+                let dhcp_on = !v4_addrs.is_empty(); // This is heuristic: got a non-APIPA IP; TODO: always works?
 
                 tux_dev.details = DeviceDetails::Ethernet(EthernetProperties {
                     speed,
                     duplex,
                     link_detected: carrier,
-                    pci_bus_id: dev.property_value("ID_PATH").and_then(|v| v.to_str().map(|s| s.to_string())),
+                    pci_bus_id: dev
+                        .property_value("ID_PATH")
+                        .and_then(|v| v.to_str().map(|s| s.to_string())),
                     operstate,
                     ipv4_address: v4_addrs,
                     ipv6_address: v6_addrs,
@@ -96,8 +114,10 @@ fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
     let addrs = getifaddrs()?;
 
     for ifaddr in addrs {
-        let (v4_list, v6_list) = map.entry(ifaddr.interface_name.clone()).or_insert((Vec::new(), Vec::new()));
-        
+        let (v4_list, v6_list) = map
+            .entry(ifaddr.interface_name.clone())
+            .or_insert((Vec::new(), Vec::new()));
+
         if let Some(address) = ifaddr.address {
             if let Some(sockaddr) = address.as_sockaddr_in() {
                 let ip: Ipv4Addr = sockaddr.ip().into();
@@ -117,4 +137,36 @@ fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
         }
     }
     Ok(map)
+}
+
+/// Helper to fetch real-time WiFi metadata via Netlink (nl80211)
+fn get_wifi_meta(sock: &mut Socket, iface_name: &str) -> Result<(Option<String>, i32, u32)> {
+    let iface_index = match nix::net::if_::if_nametoindex(iface_name) {
+        Ok(idx) => idx as i32,
+        Err(e) => anyhow::bail!("Interface {} not found: {}", iface_name, e),
+    };
+
+    // 1. Get SSID & Frequency from Interface Info
+    let interfaces = sock.get_interfaces_info().unwrap_or_default();
+    let (ssid, freq) = interfaces
+        .iter()
+        .find(|iface| iface.index == Some(iface_index))
+        .map(|iface| {
+            let s = iface
+                .ssid
+                .as_ref()
+                .map(|v| String::from_utf8_lossy(v).to_string());
+            let f = iface.frequency.unwrap_or(0);
+            (s, f)
+        })
+        .unwrap_or((None, 0));
+
+    // 2. Get Signal Strength from Station Info
+    let stations = sock.get_station_info(iface_index).unwrap_or_default();
+    let signal = stations
+        .first()
+        .and_then(|s| s.signal.or(s.average_signal))
+        .unwrap_or(0) as i32;
+
+    Ok((ssid, signal, freq))
 }

@@ -45,5 +45,5 @@ pub struct NetworkExpectation {
     pub driver: Option<String>,
     pub mac_address: Option<String>,
     pub expected_ip: Option<String>,
-    // pub ssid: Option<String>,   // Only for WiFi
+    pub expected_ssid: Option<String>, // Only for WiFi
 }
