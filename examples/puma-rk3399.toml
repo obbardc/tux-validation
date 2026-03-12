@@ -31,3 +31,10 @@ name = "Some"
 bus = 7
 address = "0x50"
 required_driver = "fan53555-regulator"
+
+[[network_devices]]
+interface_name = "end0"
+link_status = true
+speed = 100
+driver = "rk_gmac-dwmac"
+expected_ip = "192.168.0.34"
