@@ -413,7 +413,7 @@ fn verify_network_constraints(
 
     //MAC address
     if let Some(expected_mac) = &exp.mac_address {
-        if let DeviceAddress::Ethernet { mac, .. } = &dev.address {
+        if let DeviceAddress::Network { mac, .. } = &dev.address {
             checks.push(FieldCheck {
                 name: "MAC Address".into(),
                 passed: mac.to_lowercase() == expected_mac.to_lowercase(),
