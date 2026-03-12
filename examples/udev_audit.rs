@@ -3,13 +3,14 @@ use colored::*;
 use std::fs;
 use std::time::{Duration, Instant};
 use tux_validation::config::Config;
-use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::report::{
-    generate_junit_xml, print_annotated_i2c, print_annotated_usb_tree, print_xml_summary,
+    generate_junit_xml, print_annotated_i2c, print_annotated_usb_tree, print_annotated_network, print_xml_summary,
 };
+use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::usb::audit_usb_subsystem;
+use tux_validation::network::audit_network_subsystem;
 use tux_validation::validation::{
-    ValidationResult, evaluate_i2c_blueprint, evaluate_usb_blueprint,
+    ValidationResult, evaluate_i2c_blueprint, evaluate_usb_blueprint, evaluate_network_blueprint
 };
 
 #[derive(Parser)]
@@ -33,9 +34,13 @@ struct Args {
     #[arg(long)]
     i2c: bool,
 
+    /// Audit Network Subsystem
+    #[arg(long)]
+    net: bool,
+
     /// Perform hardware probe for I2C (smbus_write_quick)
     #[arg(long)]
-    hw_probe: bool,
+    i2c_hw_probe: bool,
 
     /// Print serial IDs (USB)
     #[arg(long)]
@@ -54,7 +59,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     // If no specific subsystem flag is provided, we can default to scanning all
-    let scan_all = !args.usb && !args.i2c;
+    let scan_all = !args.usb && !args.i2c && !args.net;
 
     println!("\n{}", "===== UDEV-AUDIT =====".bold().cyan());
 
@@ -63,7 +68,7 @@ fn main() -> anyhow::Result<()> {
     let mut i2c_scan_duration = Duration::ZERO;
     if args.i2c || scan_all {
         let i2c_start = Instant::now();
-        let i2c_buses = audit_all_i2c_buses(args.hw_probe)?;
+        let i2c_buses = audit_all_i2c_buses(args.i2c_hw_probe)?;
         i2c_scan_duration = i2c_start.elapsed();
         i2c_results = evaluate_i2c_blueprint(&i2c_buses, &config.i2c_devices);
         print_annotated_i2c(&i2c_buses, &i2c_results);
@@ -80,10 +85,20 @@ fn main() -> anyhow::Result<()> {
         print_annotated_usb_tree(&usb_buses, &usb_results, args.serial);
     }
 
-    let all_results: Vec<ValidationResult> = usb_results.into_iter().chain(i2c_results).collect();
+    // Network Audit
+    let mut ethernet_results: Vec<ValidationResult> = Vec::new();
+    let mut net_scan_duration = Duration::ZERO;
+    if args.net || scan_all {
+        let net_start = Instant::now();
+        let net_buses = audit_network_subsystem()?;
+        net_scan_duration = net_start.elapsed();
+        ethernet_results = evaluate_network_blueprint(&net_buses, &config.ethernet_devices);
+        print_annotated_network(&net_buses, &ethernet_results);
+    }
+    let all_results: Vec<ValidationResult> = usb_results.into_iter().chain(i2c_results).chain(ethernet_results).collect();
 
     if let Some(filepath) = args.xml_report.clone() {
-        let total_scan_duration = usb_scan_duration + i2c_scan_duration;
+        let total_scan_duration = usb_scan_duration + i2c_scan_duration + net_scan_duration;
         generate_junit_xml(&all_results, &filepath, Some(total_scan_duration))?;
         if args.xml_summary {
             print_xml_summary(&filepath)?;
