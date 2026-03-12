@@ -1,5 +1,5 @@
 use crate::device::{
-    BusStatus, DeviceDetails, EthernetProperties, Subsystem, TuxBus, TuxDevice,
+    BusStatus, DeviceDetails, EthernetProperties, WifiProperties, Subsystem, TuxBus, TuxDevice,
 };
 use anyhow::Result;
 use nix::ifaddrs::getifaddrs;
@@ -20,48 +20,61 @@ pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
         if dev.sysname() == "lo" { continue; }
 
         // Check if it's a Wireless device
-        // TODO: correct?
-        let is_wifi = dev.attribute_value("wireless").is_some() 
-            || dev.syspath().to_string_lossy().contains("phy80211");
-        if is_wifi { continue };
+        let is_wifi = dev.devtype().is_some_and(|t| t == "wlan") 
+               || dev.attribute_value("phy80211").is_some();
 
         if let Some(mut tux_dev) = TuxDevice::from_udev(&dev) {
+            // General properties
+            // IP addresses
+            let (v4_addrs, v6_addrs) = ip_map.remove(&tux_dev.name)
+            .unwrap_or((Vec::new(), Vec::new()));
+
             // Extract carrier state and treat it as hw probe
             let carrier = dev.attribute_value("carrier")
                 .and_then(|v| v.to_str()) == Some("1");
             tux_dev.status.hw_responding = Some(carrier);
 
-            // Extract extended properties from sysfs via udev attributes
-            let speed = dev.attribute_value("speed")
-                .and_then(|v| v.to_str()?.parse::<u32>().ok())
-                .unwrap_or(0);
+            if is_wifi {
+                // Wifi
+                tux_dev.details = DeviceDetails::Wifi(WifiProperties {
+                    ssid: dev.attribute_value("ssid").map(|s| s.to_string_lossy().into()), // Needs real Wifi tools for full depth, but udev sometimes has this
+                    signal_level: 0, // Placeholder: requires nl80211 for accuracy
+                    frequency: 0,    // Placeholder
+                    link_detected: carrier,
+                    ipv4_address: v4_addrs,
+                    ipv6_address: v6_addrs,
+                });
+            } else {
+                // Ethernet
+                // Extract extended properties from sysfs via udev attributes
+                let speed = dev.attribute_value("speed")
+                    .and_then(|v| v.to_str()?.parse::<u32>().ok())
+                    .unwrap_or(0);
             
-            let duplex = dev.attribute_value("duplex")
-                .and_then(|v| v.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+                let duplex = dev.attribute_value("duplex")
+                    .and_then(|v| v.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-            let operstate = dev.attribute_value("operstate")
-                .and_then(|v| v.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+                let operstate = dev.attribute_value("operstate")
+                    .and_then(|v| v.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-            let (v4_addrs, v6_addrs) = ip_map.remove(&tux_dev.name)
-            .unwrap_or((Vec::new(), Vec::new()));
+                let dhcp_on  = !v4_addrs.is_empty(); // This is heuristic: got a non-APIPA IP; TODO: always works?
 
-            let dhcp_on  = !v4_addrs.is_empty(); // This is heuristic: got a non-APIPA IP; TODO: always works?
-
-            tux_dev.details = DeviceDetails::Ethernet(EthernetProperties {
-                speed,
-                duplex,
-                link_detected: carrier,
-                pci_bus_id: dev.property_value("ID_PATH").and_then(|v| v.to_str().map(|s| s.to_string())),
-                operstate,
-                ipv4_address: v4_addrs,
-                ipv6_address: v6_addrs,
-                dhcp_enabled: dhcp_on,
-                firmware_version: None,
-            });
+                tux_dev.details = DeviceDetails::Ethernet(EthernetProperties {
+                    speed,
+                    duplex,
+                    link_detected: carrier,
+                    pci_bus_id: dev.property_value("ID_PATH").and_then(|v| v.to_str().map(|s| s.to_string())),
+                    operstate,
+                    ipv4_address: v4_addrs,
+                    ipv6_address: v6_addrs,
+                    dhcp_enabled: dhcp_on,
+                    firmware_version: None,
+                });
+            }
 
             net_devices.push(tux_dev);
         }
