@@ -423,15 +423,15 @@ fn verify_network_constraints(
     };
 
     //MAC address
-    if let Some(expected_mac) = &exp.mac_address {
-        if let DeviceAddress::Network { mac, .. } = &dev.address {
-            checks.push(FieldCheck {
-                name: "MAC Address".into(),
-                passed: mac.to_lowercase() == expected_mac.to_lowercase(),
-                expected: expected_mac.clone(),
-                actual: mac.clone(),
-            });
-        }
+    if let Some(expected_mac) = &exp.mac_address
+        && let DeviceAddress::Network { mac, .. } = &dev.address
+    {
+        checks.push(FieldCheck {
+            name: "MAC Address".into(),
+            passed: mac.to_lowercase() == expected_mac.to_lowercase(),
+            expected: expected_mac.clone(),
+            actual: mac.clone(),
+        });
     }
 
     // Physical Link
@@ -443,15 +443,15 @@ fn verify_network_constraints(
     });
 
     // Speed
-    if let Some(expected_speed) = exp.speed {
-        if let Some(actual_speed) = current_speed {
-            checks.push(FieldCheck {
-                name: "Speed".into(),
-                passed: actual_speed >= expected_speed,
-                expected: format!("{}+ Mbps", expected_speed),
-                actual: format!("{} Mbps", actual_speed),
-            });
-        }
+    if let Some(expected_speed) = exp.speed
+        && let Some(actual_speed) = current_speed
+    {
+        checks.push(FieldCheck {
+            name: "Speed".into(),
+            passed: actual_speed >= expected_speed,
+            expected: format!("{}+ Mbps", expected_speed),
+            actual: format!("{} Mbps", actual_speed),
+        });
     }
 
     // IPv4 Presence/DHCP
@@ -497,15 +497,15 @@ fn verify_network_constraints(
         });
     }
 
-    if let DeviceDetails::Wifi(wifi_props) = &dev.details {
-        if let Some(expected_ssid) = &exp.expected_ssid {
-            checks.push(FieldCheck {
-                name: "SSID".into(),
-                passed: wifi_props.ssid.as_ref() == Some(expected_ssid),
-                expected: expected_ssid.clone(),
-                actual: wifi_props.ssid.clone().unwrap_or("None".into()),
-            });
-        }
+    if let DeviceDetails::Wifi(wifi_props) = &dev.details
+        && let Some(expected_ssid) = &exp.expected_ssid
+    {
+        checks.push(FieldCheck {
+            name: "SSID".into(),
+            passed: wifi_props.ssid.as_ref() == Some(expected_ssid),
+            expected: expected_ssid.clone(),
+            actual: wifi_props.ssid.clone().unwrap_or("None".into()),
+        });
     }
 
     let all_passed = checks.iter().all(|c| c.passed);

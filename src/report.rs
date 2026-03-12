@@ -314,14 +314,14 @@ fn print_network_interface_details(
     // 2. MAC Address Line
     if let DeviceAddress::Network { mac, .. } = &dev.address {
         let mut mac_colored = mac.blue().dimmed();
-        if let Some(r) = res {
-            if let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address") {
-                mac_colored = if check.passed {
-                    mac.green().dimmed()
-                } else {
-                    mac.red().dimmed()
-                };
-            }
+        if let Some(r) = res
+            && let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address")
+        {
+            mac_colored = if check.passed {
+                mac.green().dimmed()
+            } else {
+                mac.red().dimmed()
+            };
         }
         println!("    ┣━ MAC:    {}", mac_colored);
     }
@@ -329,14 +329,14 @@ fn print_network_interface_details(
     // 3. Driver
     let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
     let mut driver_colored = driver_name.blue();
-    if let Some(r) = res {
-        if let Some(check) = r.checks.iter().find(|c| c.name == "Driver") {
-            driver_colored = if check.passed {
-                driver_name.green().bold()
-            } else {
-                driver_name.red().bold()
-            };
-        }
+    if let Some(r) = res
+        && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
+    {
+        driver_colored = if check.passed {
+            driver_name.green().bold()
+        } else {
+            driver_name.red().bold()
+        };
     }
     println!("    ┣━ Driver: {}", driver_colored);
 
@@ -344,14 +344,14 @@ fn print_network_interface_details(
     if !ipv4.is_empty() {
         let ipv4_str = ipv4.join(", ");
         let mut ipv4_colored = ipv4_str.blue().dimmed();
-        if let Some(r) = res {
-            if let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check") {
-                ipv4_colored = if check.passed {
-                    ipv4_str.green().dimmed()
-                } else {
-                    ipv4_str.red().dimmed()
-                };
-            }
+        if let Some(r) = res
+            && let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check")
+        {
+            ipv4_colored = if check.passed {
+                ipv4_str.green().dimmed()
+            } else {
+                ipv4_str.red().dimmed()
+            };
         }
         println!("    ┣━ IPv4:   {}", ipv4_colored);
     } else {
@@ -368,14 +368,14 @@ fn print_network_interface_details(
         // SSID with Validation Coloring
         if let Some(ssid) = &props.ssid {
             let mut ssid_colored = ssid.blue().bold();
-            if let Some(r) = res {
-                if let Some(check) = r.checks.iter().find(|c| c.name == "SSID") {
-                    ssid_colored = if check.passed {
-                        ssid.green().bold()
-                    } else {
-                        ssid.red().bold()
-                    };
-                }
+            if let Some(r) = res
+                && let Some(check) = r.checks.iter().find(|c| c.name == "SSID")
+            {
+                ssid_colored = if check.passed {
+                    ssid.green().bold()
+                } else {
+                    ssid.red().bold()
+                };
             }
             println!("    ┣━ SSID:   {}", ssid_colored);
         }
@@ -405,14 +405,14 @@ fn print_network_interface_details(
         let duplex_colored = duplex
             .map_or("".to_string(), |d| format!("({})", d))
             .yellow();
-        if let Some(r) = res {
-            if let Some(check) = r.checks.iter().find(|c| c.name == "Speed") {
-                speed_colored = if check.passed {
-                    speed_str.green().bold()
-                } else {
-                    speed_str.red().bold()
-                };
-            }
+        if let Some(r) = res
+            && let Some(check) = r.checks.iter().find(|c| c.name == "Speed")
+        {
+            speed_colored = if check.passed {
+                speed_str.green().bold()
+            } else {
+                speed_str.red().bold()
+            };
         }
         println!("    ┗━ Config: {} {}", speed_colored, duplex_colored);
     } else {
