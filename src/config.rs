@@ -7,7 +7,7 @@ pub struct Config {
     #[serde(default)]
     pub i2c_devices: Vec<I2cExpectation>,
     #[serde(default)]
-    pub ethernet_devices: Vec<EthernetExpectation>,
+    pub network_devices: Vec<NetworkExpectation>,
 }
 
 //TODO: make all test fields optional?
@@ -38,11 +38,12 @@ impl I2cExpectation {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EthernetExpectation {
+pub struct NetworkExpectation {
     pub interface_name: String,
     pub link_status: bool,
     pub speed: Option<u32>,
     pub driver: Option<String>,
     pub mac_address: Option<String>,
     pub expected_ip: Option<String>,
+    // pub ssid: Option<String>,   // Only for WiFi
 }
