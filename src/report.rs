@@ -288,16 +288,21 @@ pub fn print_annotated_network(buses: &[TuxBus], results: &[ValidationResult]) {
 
                 // 4. IP Addresses
                 if !props.ipv4_address.is_empty() {
-                    let ip_str = props.ipv4_address.join(", ");
-                    let mut ip_colored = ip_str.blue().dimmed();
+                    let ipv4_str = props.ipv4_address.join(", ");
+                    let mut ipv4_colored = ipv4_str.blue().dimmed();
                     if let Some(r) = res {
                         if let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check") {
-                            ip_colored = if check.passed { ip_str.green().dimmed() } else { ip_str.red().dimmed() };
+                            ipv4_colored = if check.passed { ipv4_str.green().dimmed() } else { ipv4_str.red().dimmed() };
                         }
                     }
-                    println!("    ┣━ IPv4:   {}", ip_colored);
+                    println!("    ┣━ IPv4:   {}", ipv4_colored);
                 } else {
                     println!("    ┣━ IPv4:   {}", "none".yellow().dimmed());
+                }
+
+                if !props.ipv6_address.is_empty() {
+                    let ipv6_str = props.ipv6_address.join(", ");
+                    println!("    ┣━ IPv6:   {}", ipv6_str.blue().dimmed());
                 }
 
                 // 5. Speed & Duplex
