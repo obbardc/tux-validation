@@ -7,7 +7,7 @@ use std::time::{Duration as CoreDuration, Instant};
 pub enum TargetId {
     Usb { vid: String, pid: String },
     I2c { bus: u8, address: u16 },
-    Ethernet { interface: String }
+    Network { interface: String }
 }
 
 /// The outcome of a single expectation check
@@ -387,9 +387,9 @@ pub fn evaluate_network_blueprint(
         };
 
         results.push(ValidationResult {
-            subsystem: "Ethernet".to_string(),
+            subsystem: "Network".to_string(),
             item_name: exp.interface_name.clone(),
-            target_id: TargetId::Ethernet { interface: exp.interface_name.clone() },
+            target_id: TargetId::Network { interface: exp.interface_name.clone() },
             location: exp.interface_name.clone(),
             status,
             checks,
@@ -405,9 +405,10 @@ fn verify_network_constraints(
 ) -> (AuditStatus, Vec<FieldCheck>) {
     let mut checks = Vec::new();
 
-    let props = match &dev.details {
-        DeviceDetails::Ethernet(p) => p,
-        _ => return (AuditStatus::Fail { reason: "Device details mismatch".into(), actual_value: "".into() }, checks),
+    let (ipv4_list, link_detected, current_speed) = match &dev.details {
+        DeviceDetails::Ethernet(p) => (&p.ipv4_address, p.link_detected, Some(p.speed)),
+        DeviceDetails::Wifi(p) => (&p.ipv4_address, p.link_detected, None), // Wifi speed is variable
+        _ => return (AuditStatus::Fail { reason: "Not a network device".into(), actual_value: "".into() }, checks),
     };
 
     //MAC address
@@ -425,37 +426,38 @@ fn verify_network_constraints(
     // Physical Link
     checks.push(FieldCheck {
         name: "Link Status".into(),
-        passed: props.link_detected == exp.link_status,
+        passed: link_detected == exp.link_status,
         expected: exp.link_status.to_string(),
-        actual: props.link_detected.to_string(),
+        actual: link_detected.to_string(),
     });
 
     // Speed
     if let Some(expected_speed) = exp.speed {
-        checks.push(FieldCheck {
-            name: "Speed".into(),
-            passed: props.speed >= expected_speed,
-            expected: format!("{}+ Mbps", expected_speed),
-            actual: format!("{} Mbps", props.speed),
-        });
+        if let Some(actual_speed) = current_speed {
+            checks.push(FieldCheck {
+                name: "Speed".into(),
+                passed: actual_speed >= expected_speed,
+                expected: format!("{}+ Mbps", expected_speed),
+                actual: format!("{} Mbps", actual_speed),
+            });
+        }
     }
 
     // IPv4 Presence/DHCP
-    let has_any_v4 = !props.ipv4_address.is_empty();
+    let has_any_v4 = !ipv4_list.is_empty();
     let (ip_passed, expected_str, actual_str) = if let Some(target_ip) = &exp.expected_ip {
         // We want a specific IP
-        let found = props.ipv4_address.iter().any(|addr| addr == target_ip);
+        let found = ipv4_list.iter().any(|addr| addr == target_ip);
         (
             found, 
             target_ip.clone(), 
-            if has_any_v4 { props.ipv4_address.join(", ") } else { "None".into() }
+            if has_any_v4 { ipv4_list.join(", ") } else { "None".into() }
         )
     } else {
-        // We just want ANY valid IP
         (
             has_any_v4, 
             "Any valid IPv4".into(), 
-            if has_any_v4 { props.ipv4_address.join(", ") } else { "None".into() }
+            if has_any_v4 { ipv4_list.join(", ") } else { "None".into() }
         )
     };
     checks.push(FieldCheck {

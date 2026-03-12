@@ -65,7 +65,7 @@ pub enum DeviceDetails {
     Usb(UsbProperties),
     I2c(I2cProperties),
     Ethernet(EthernetProperties),
-//    Wifi(WifiProperties),
+    Wifi(WifiProperties),
     None,
 }
 
@@ -101,6 +101,16 @@ pub struct EthernetProperties {
     pub ipv6_address: Vec<String>,
     pub dhcp_enabled: bool,
     pub firmware_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WifiProperties {
+    pub ssid: Option<String>,
+    pub signal_level: i32,     // in dBm (e.g. -50)
+    pub frequency: u32,        // in MHz (e.g. 2412)
+    pub link_detected: bool,   // Connected to AP
+    pub ipv4_address: Vec<String>,
+    pub ipv6_address: Vec<String>,
 }
 
 /// Device class
