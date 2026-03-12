@@ -1,4 +1,4 @@
-use crate::config::{I2cExpectation, UsbExpectation, EthernetExpectation};
+use crate::config::{I2cExpectation, UsbExpectation, NetworkExpectation};
 use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, Subsystem};
 use std::time::{Duration as CoreDuration, Instant};
 
@@ -363,7 +363,7 @@ pub fn verify_i2c_constraints(
 
 pub fn evaluate_network_blueprint(
     buses: &[TuxBus],
-    blueprint: &[EthernetExpectation],
+    blueprint: &[NetworkExpectation],
 ) -> Vec<ValidationResult> {
     let mut results = Vec::new();
 
@@ -377,7 +377,7 @@ pub fn evaluate_network_blueprint(
             .find(|dev| dev.name == exp.interface_name);
 
         let (status, checks) = match found_device {
-            Some(dev) => verify_ethernet_constraints(dev, exp),
+            Some(dev) => verify_network_constraints(dev, exp),
             None => (
                 AuditStatus::Missing {
                     reason: format!("Interface {} not found", exp.interface_name),
@@ -399,9 +399,9 @@ pub fn evaluate_network_blueprint(
     results
 }
 
-fn verify_ethernet_constraints(
+fn verify_network_constraints(
     dev: &TuxDevice,
-    exp: &EthernetExpectation,
+    exp: &NetworkExpectation,
 ) -> (AuditStatus, Vec<FieldCheck>) {
     let mut checks = Vec::new();
 

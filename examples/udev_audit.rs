@@ -86,16 +86,16 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Network Audit
-    let mut ethernet_results: Vec<ValidationResult> = Vec::new();
+    let mut network_results: Vec<ValidationResult> = Vec::new();
     let mut net_scan_duration = Duration::ZERO;
     if args.net || scan_all {
         let net_start = Instant::now();
         let net_buses = audit_network_subsystem()?;
         net_scan_duration = net_start.elapsed();
-        ethernet_results = evaluate_network_blueprint(&net_buses, &config.ethernet_devices);
-        print_annotated_network(&net_buses, &ethernet_results);
+        network_results = evaluate_network_blueprint(&net_buses, &config.network_devices);
+        print_annotated_network(&net_buses, &network_results);
     }
-    let all_results: Vec<ValidationResult> = usb_results.into_iter().chain(i2c_results).chain(ethernet_results).collect();
+    let all_results: Vec<ValidationResult> = usb_results.into_iter().chain(i2c_results).chain(network_results).collect();
 
     if let Some(filepath) = args.xml_report.clone() {
         let total_scan_duration = usb_scan_duration + i2c_scan_duration + net_scan_duration;
