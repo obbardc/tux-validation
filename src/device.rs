@@ -23,7 +23,7 @@ pub enum DeviceAddress {
         vid: String,       // "046d"
         pid: String,       // "c05a"
     },
-    Ethernet {
+    Network {
         interface: String, // e.g., "eth0"
         mac: String,       // e.g., "00:1a:2b:3c:4d:5e"
     },
@@ -189,7 +189,7 @@ impl TuxDevice {
                 .unwrap_or("00:00:00:00:00:00")
                 .to_string();
             
-            DeviceAddress::Ethernet {
+            DeviceAddress::Network {
                 interface: dev_sysname.to_string(),
                 mac,
             }
@@ -222,7 +222,7 @@ impl TuxDevice {
                 .unwrap_or("Unknown USB Device")
                 .to_string(),
 
-            DeviceAddress::Ethernet { interface, .. } => interface.clone(),
+            DeviceAddress::Network { interface, .. } => interface.clone(),
 
             DeviceAddress::Pci { .. } => {
                 // To be elaborated later

@@ -289,7 +289,7 @@ fn print_network_interface_details(
     println!("  {} {} [{}]", status_symbol, dev.name.cyan(), link_text);
 
     // 2. MAC Address Line
-    if let DeviceAddress::Ethernet { mac, .. } = &dev.address {
+    if let DeviceAddress::Network { mac, .. } = &dev.address {
         let mut mac_colored = mac.blue().dimmed();
         if let Some(r) = res {
             if let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address") {

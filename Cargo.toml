@@ -8,7 +8,7 @@ description = "Linux Validation Framework"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4.4", features = ["derive"] } # Added for CLI args
+clap = { version = "4.4", features = ["derive"] }
 i2cdev = "0.6"
 nix = "0.26.4"
 udev = "^0.9.3"
@@ -18,3 +18,4 @@ colored = "3.1"
 toml = "1.0"
 junit-report = "0.8"
 roxmltree = "0.21.1"
+neli-wifi = "0.6"
