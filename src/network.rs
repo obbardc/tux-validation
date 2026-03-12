@@ -109,6 +109,7 @@ pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
 }
 
 /// Uses nix to find IP addresses for all interfaces
+#[allow(clippy::type_complexity)]
 fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
     let mut map = HashMap::new();
     let addrs = getifaddrs()?;
@@ -127,7 +128,7 @@ fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
                     v4_list.push(ip_str);
                 }
             } else if let Some(sockaddr_v6) = address.as_sockaddr_in6() {
-                let ip: Ipv6Addr = sockaddr_v6.ip().into();
+                let ip: Ipv6Addr = sockaddr_v6.ip();
                 let ip_str = ip.to_string();
                 // Filter out Link-Local IPv6: starts with fe80; TODO: correct?
                 if !ip_str.starts_with("fe80:") {
