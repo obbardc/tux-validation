@@ -3,6 +3,7 @@ use crate::device::{
 };
 use anyhow::Result;
 use nix::ifaddrs::getifaddrs;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::collections::HashMap;
 use udev::Enumerator;
 
@@ -86,16 +87,18 @@ fn get_interface_ips() -> Result<HashMap<String, (Vec<String>, Vec<String>)>> {
         
         if let Some(address) = ifaddr.address {
             if let Some(sockaddr) = address.as_sockaddr_in() {
-                let ip = sockaddr.ip().to_string();
+                let ip: Ipv4Addr = sockaddr.ip().into();
+                let ip_str = ip.to_string();
                 // Filter out APIPA (Link-Local) IPv4: 169.254.0.0/16; TODO: correct?
-                if !ip.starts_with("169.254.") {
-                    v4_list.push(ip);
+                if !ip_str.starts_with("169.254.") {
+                    v4_list.push(ip_str);
                 }
             } else if let Some(sockaddr_v6) = address.as_sockaddr_in6() {
-                let ip = sockaddr_v6.ip().to_string();
+                let ip: Ipv6Addr = sockaddr_v6.ip().into();
+                let ip_str = ip.to_string();
                 // Filter out Link-Local IPv6: starts with fe80; TODO: correct?
-                if !ip.starts_with("fe80:") {
-                    v6_list.push(ip);
+                if !ip_str.starts_with("fe80:") {
+                    v6_list.push(ip_str);
                 }
             }
         }
