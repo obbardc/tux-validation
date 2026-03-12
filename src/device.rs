@@ -91,12 +91,12 @@ pub struct I2cProperties;
 #[derive(Debug, Clone, Serialize)]
 pub struct EthernetProperties {
     // --- Hardware Layer ---
-    pub speed: u32,           // 10, 100, 1000
-    pub duplex: String,       // "full", "half"
-    pub link_detected: bool,  // Physical Carrier
+    pub speed: u32,          // 10, 100, 1000
+    pub duplex: String,      // "full", "half"
+    pub link_detected: bool, // Physical Carrier
     pub pci_bus_id: Option<String>,
     // --- Software/Network Layer ---
-    pub operstate: String,    // "up", "down", "testing"
+    pub operstate: String, // "up", "down", "testing"
     pub ipv4_address: Vec<String>,
     pub ipv6_address: Vec<String>,
     pub dhcp_enabled: bool,
@@ -106,9 +106,9 @@ pub struct EthernetProperties {
 #[derive(Debug, Clone, Serialize)]
 pub struct WifiProperties {
     pub ssid: Option<String>,
-    pub signal_level: i32,     // in dBm (e.g. -50)
-    pub frequency: u32,        // in MHz (e.g. 2412)
-    pub link_detected: bool,   // Connected to AP
+    pub signal_level: i32,   // in dBm (e.g. -50)
+    pub frequency: u32,      // in MHz (e.g. 2412)
+    pub link_detected: bool, // Connected to AP
     pub ipv4_address: Vec<String>,
     pub ipv6_address: Vec<String>,
 }
@@ -184,11 +184,12 @@ impl TuxDevice {
                 pid: dev.attribute_value("idProduct")?.to_str()?.to_string(),
             }
         } else if subsystem == "net" {
-            let mac = dev.attribute_value("address")
+            let mac = dev
+                .attribute_value("address")
                 .and_then(|v| v.to_str())
                 .unwrap_or("00:00:00:00:00:00")
                 .to_string();
-            
+
             DeviceAddress::Network {
                 interface: dev_sysname.to_string(),
                 mac,
@@ -202,9 +203,11 @@ impl TuxDevice {
         let driver = if let Some(d) = dev.driver() {
             d.to_str().map(|s| s.to_string())
         } else if subsystem == "net" {
-        // If we're in 'net', explicitly look at the parent
+            // If we're in 'net', explicitly look at the parent
             dev.parent().and_then(|parent| {
-                parent.driver().and_then(|d| d.to_str().map(|s| s.to_string()))
+                parent
+                    .driver()
+                    .and_then(|d| d.to_str().map(|s| s.to_string()))
             })
         } else {
             None
@@ -227,7 +230,7 @@ impl TuxDevice {
             DeviceAddress::Pci { .. } => {
                 // To be elaborated later
                 "PCI Device".to_string()
-            },
+            }
         };
 
         Some(TuxDevice {

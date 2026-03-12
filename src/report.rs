@@ -1,4 +1,4 @@
-use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, UsbInterface, Subsystem};
+use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface};
 use crate::validation::{AuditStatus, TargetId, ValidationResult};
 use colored::Colorize;
 use junit_report::{Duration as JunitDuration, Report, TestCase, TestSuite};
@@ -239,19 +239,38 @@ pub fn print_annotated_network(buses: &[TuxBus], results: &[ValidationResult]) {
     //TODO: should apply filter to other subsystems too...
     for bus in buses.iter().filter(|b| b.subsystem == Subsystem::Net) {
         if bus.devices.is_empty() {
-            println!("  {}", "No network interfaces detected (excluding loopback).".yellow());
+            println!(
+                "  {}",
+                "No network interfaces detected (excluding loopback).".yellow()
+            );
             continue;
         }
 
         for dev in &bus.devices {
             match &dev.details {
-            DeviceDetails::Ethernet(props) => {
-                print_network_interface_details(dev, props.link_detected, &props.ipv4_address, &props.ipv6_address, Some(props.speed), Some(&props.duplex), results);
-            }
-            DeviceDetails::Wifi(props) => {
-                print_network_interface_details(dev, props.link_detected, &props.ipv4_address, &props.ipv6_address, None, None, results);
-            }
-            _ => continue,
+                DeviceDetails::Ethernet(props) => {
+                    print_network_interface_details(
+                        dev,
+                        props.link_detected,
+                        &props.ipv4_address,
+                        &props.ipv6_address,
+                        Some(props.speed),
+                        Some(&props.duplex),
+                        results,
+                    );
+                }
+                DeviceDetails::Wifi(props) => {
+                    print_network_interface_details(
+                        dev,
+                        props.link_detected,
+                        &props.ipv4_address,
+                        &props.ipv6_address,
+                        None,
+                        None,
+                        results,
+                    );
+                }
+                _ => continue,
             }
         }
     }
@@ -259,13 +278,13 @@ pub fn print_annotated_network(buses: &[TuxBus], results: &[ValidationResult]) {
 
 // Helper printing function for Eth/Wifi
 fn print_network_interface_details(
-    dev: &TuxDevice, 
-    link_detected: bool, 
-    ipv4: &[String], 
-    ipv6: &[String], 
-    speed: Option<u32>, 
-    duplex: Option<&String>, 
-    results: &[ValidationResult]
+    dev: &TuxDevice,
+    link_detected: bool,
+    ipv4: &[String],
+    ipv6: &[String],
+    speed: Option<u32>,
+    duplex: Option<&String>,
+    results: &[ValidationResult],
 ) {
     // Use speed.map_or(...) to hide speed for Wifi devices
     // Find the validation record for this interface
@@ -285,7 +304,11 @@ fn print_network_interface_details(
     };
 
     // 1. Header: Interface Name and Physical Link Status
-    let link_text = if link_detected { "UP".green().bold() } else { "DOWN".red().bold() };
+    let link_text = if link_detected {
+        "UP".green().bold()
+    } else {
+        "DOWN".red().bold()
+    };
     println!("  {} {} [{}]", status_symbol, dev.name.cyan(), link_text);
 
     // 2. MAC Address Line
@@ -293,7 +316,11 @@ fn print_network_interface_details(
         let mut mac_colored = mac.blue().dimmed();
         if let Some(r) = res {
             if let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address") {
-                mac_colored = if check.passed { mac.green().dimmed() } else { mac.red().dimmed() };
+                mac_colored = if check.passed {
+                    mac.green().dimmed()
+                } else {
+                    mac.red().dimmed()
+                };
             }
         }
         println!("    ┣━ MAC:    {}", mac_colored);
@@ -304,7 +331,11 @@ fn print_network_interface_details(
     let mut driver_colored = driver_name.blue();
     if let Some(r) = res {
         if let Some(check) = r.checks.iter().find(|c| c.name == "Driver") {
-            driver_colored = if check.passed { driver_name.green().bold() } else { driver_name.red().bold() };
+            driver_colored = if check.passed {
+                driver_name.green().bold()
+            } else {
+                driver_name.red().bold()
+            };
         }
     }
     println!("    ┣━ Driver: {}", driver_colored);
@@ -315,7 +346,11 @@ fn print_network_interface_details(
         let mut ipv4_colored = ipv4_str.blue().dimmed();
         if let Some(r) = res {
             if let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check") {
-                ipv4_colored = if check.passed { ipv4_str.green().dimmed() } else { ipv4_str.red().dimmed() };
+                ipv4_colored = if check.passed {
+                    ipv4_str.green().dimmed()
+                } else {
+                    ipv4_str.red().dimmed()
+                };
             }
         }
         println!("    ┣━ IPv4:   {}", ipv4_colored);
@@ -328,14 +363,55 @@ fn print_network_interface_details(
         println!("    ┣━ IPv6:   {}", ipv6_str.blue().dimmed());
     }
 
-    // 5. Speed & Duplex
+    // If wifi, SSID, Signal and Frequency
+    if let DeviceDetails::Wifi(props) = &dev.details {
+        // SSID with Validation Coloring
+        if let Some(ssid) = &props.ssid {
+            let mut ssid_colored = ssid.blue().bold();
+            if let Some(r) = res {
+                if let Some(check) = r.checks.iter().find(|c| c.name == "SSID") {
+                    ssid_colored = if check.passed {
+                        ssid.green().bold()
+                    } else {
+                        ssid.red().bold()
+                    };
+                }
+            }
+            println!("    ┣━ SSID:   {}", ssid_colored);
+        }
+
+        // Signal Level (Color-coded by strength)
+        if props.signal_level != 0 {
+            let signal_color = match props.signal_level {
+                s if s > -50 => s.to_string().green(),
+                s if s > -70 => s.to_string().yellow(),
+                _ => props.signal_level.to_string().red(),
+            };
+            println!("    ┣━ Signal: {} dBm", signal_color);
+        }
+
+        // Frequency (Converting MHz to GHz)
+        if props.frequency != 0 {
+            // Convert e.g., 2412 MHz to 2.412 GHz
+            let ghz = props.frequency as f32 / 1000.0;
+            println!("    ┣━ Freq:   {:.3} GHz", ghz.to_string().dimmed());
+        }
+    }
+
+    // Speed & Duplex
     if link_detected {
         let speed_str = speed.map_or("Connected".to_string(), |s| format!("{} Mbps", s));
         let mut speed_colored = speed_str.blue();
-        let duplex_colored = duplex.map_or("".to_string(), |d| format!("({})", d)).yellow();
+        let duplex_colored = duplex
+            .map_or("".to_string(), |d| format!("({})", d))
+            .yellow();
         if let Some(r) = res {
             if let Some(check) = r.checks.iter().find(|c| c.name == "Speed") {
-                speed_colored = if check.passed { speed_str.green().bold() } else { speed_str.red().bold() };
+                speed_colored = if check.passed {
+                    speed_str.green().bold()
+                } else {
+                    speed_str.red().bold()
+                };
             }
         }
         println!("    ┗━ Config: {} {}", speed_colored, duplex_colored);

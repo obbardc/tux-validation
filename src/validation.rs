@@ -1,5 +1,5 @@
-use crate::config::{I2cExpectation, UsbExpectation, NetworkExpectation};
-use crate::device::{DeviceAddress, DeviceDetails, TuxBus, TuxDevice, Subsystem};
+use crate::config::{I2cExpectation, NetworkExpectation, UsbExpectation};
+use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice};
 use std::time::{Duration as CoreDuration, Instant};
 
 /// A generic way to identify what hardware a particular test was looking for
@@ -7,7 +7,7 @@ use std::time::{Duration as CoreDuration, Instant};
 pub enum TargetId {
     Usb { vid: String, pid: String },
     I2c { bus: u8, address: u16 },
-    Network { interface: String }
+    Network { interface: String },
 }
 
 /// The outcome of a single expectation check
@@ -369,9 +369,10 @@ pub fn evaluate_network_blueprint(
 
     for exp in blueprint {
         let start_time = std::time::Instant::now();
-        
+
         // Find the device in the Net subsystem
-        let found_device = buses.iter()
+        let found_device = buses
+            .iter()
             .filter(|bus| bus.subsystem == Subsystem::Net)
             .flat_map(|bus| &bus.devices)
             .find(|dev| dev.name == exp.interface_name);
@@ -389,7 +390,9 @@ pub fn evaluate_network_blueprint(
         results.push(ValidationResult {
             subsystem: "Network".to_string(),
             item_name: exp.interface_name.clone(),
-            target_id: TargetId::Network { interface: exp.interface_name.clone() },
+            target_id: TargetId::Network {
+                interface: exp.interface_name.clone(),
+            },
             location: exp.interface_name.clone(),
             status,
             checks,
@@ -408,7 +411,15 @@ fn verify_network_constraints(
     let (ipv4_list, link_detected, current_speed) = match &dev.details {
         DeviceDetails::Ethernet(p) => (&p.ipv4_address, p.link_detected, Some(p.speed)),
         DeviceDetails::Wifi(p) => (&p.ipv4_address, p.link_detected, None), // Wifi speed is variable
-        _ => return (AuditStatus::Fail { reason: "Not a network device".into(), actual_value: "".into() }, checks),
+        _ => {
+            return (
+                AuditStatus::Fail {
+                    reason: "Not a network device".into(),
+                    actual_value: "".into(),
+                },
+                checks,
+            );
+        }
     };
 
     //MAC address
@@ -449,15 +460,23 @@ fn verify_network_constraints(
         // We want a specific IP
         let found = ipv4_list.iter().any(|addr| addr == target_ip);
         (
-            found, 
-            target_ip.clone(), 
-            if has_any_v4 { ipv4_list.join(", ") } else { "None".into() }
+            found,
+            target_ip.clone(),
+            if has_any_v4 {
+                ipv4_list.join(", ")
+            } else {
+                "None".into()
+            },
         )
     } else {
         (
-            has_any_v4, 
-            "Any valid IPv4".into(), 
-            if has_any_v4 { ipv4_list.join(", ") } else { "None".into() }
+            has_any_v4,
+            "Any valid IPv4".into(),
+            if has_any_v4 {
+                ipv4_list.join(", ")
+            } else {
+                "None".into()
+            },
         )
     };
     checks.push(FieldCheck {
@@ -478,8 +497,21 @@ fn verify_network_constraints(
         });
     }
 
+    if let DeviceDetails::Wifi(wifi_props) = &dev.details {
+        if let Some(expected_ssid) = &exp.expected_ssid {
+            checks.push(FieldCheck {
+                name: "SSID".into(),
+                passed: wifi_props.ssid.as_ref() == Some(expected_ssid),
+                expected: expected_ssid.clone(),
+                actual: wifi_props.ssid.clone().unwrap_or("None".into()),
+            });
+        }
+    }
+
     let all_passed = checks.iter().all(|c| c.passed);
-    let status = if all_passed { AuditStatus::Pass } else { 
+    let status = if all_passed {
+        AuditStatus::Pass
+    } else {
         let failed_msgs: Vec<String> = checks
             .iter()
             .filter(|c| !c.passed)
