@@ -27,9 +27,12 @@ pub enum DeviceAddress {
         interface: String, // e.g., "eth0"
         mac: String,       // e.g., "00:1a:2b:3c:4d:5e"
     },
-    Pci {
-        slot: String,
-    }, // e.g. "00:02.0"
+    Pcie {
+        domain: u16,  // e.g., 0000
+        bus: u8,      // e.g., 00
+        device: u8,   // e.g., 1f
+        function: u8, // e.g., 3
+    },
 }
 
 /// Custom serializer to turn numbers into 0xYY hex strings
@@ -66,6 +69,7 @@ pub enum DeviceDetails {
     I2c(I2cProperties),
     Ethernet(EthernetProperties),
     Wifi(WifiProperties),
+    Pcie(PcieProperties),
     None,
 }
 
@@ -101,6 +105,22 @@ pub struct EthernetProperties {
     pub ipv6_address: Vec<String>,
     pub dhcp_enabled: bool,
     pub firmware_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PcieProperties {
+    pub vendor_id: String,   // e.g., "0x144d"
+    pub device_id: String,   // e.g., "0xa80d"
+    pub vendor_name: String, // e.g., "Samsung Electronics Co Ltd"
+    pub device_name: String, // e.g., "NVMe SSD Controller PM9C1a"
+    pub class_name: String,  // e.g., "Mass storage controller"
+    pub revision: String,    // e.g., "0x00"
+
+    // Physical Link Attributes (May be None for integrated/virtual devices)
+    pub max_link_speed: Option<String>, // e.g., "16.0 GT/s PCIe"
+    pub cur_link_speed: Option<String>, // e.g., "16.0 GT/s PCIe"
+    pub max_link_width: Option<u8>,     // e.g., 4
+    pub cur_link_width: Option<u8>,     // e.g., 4
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,6 +214,30 @@ impl TuxDevice {
                 interface: dev_sysname.to_string(),
                 mac,
             }
+        } else if subsystem == "pci" {
+            // PCIe sysnames are strictly formatted as DDDD:BB:DD.F (in hex)
+            let parts: Vec<&str> = dev_sysname.split(':').collect();
+            if parts.len() != 3 {
+                return None;
+            }
+
+            let dev_fn: Vec<&str> = parts[2].split('.').collect();
+            if dev_fn.len() != 2 {
+                return None;
+            }
+
+            // Parse the hex strings into proper integers
+            let domain = u16::from_str_radix(parts[0], 16).ok()?;
+            let bus = u8::from_str_radix(parts[1], 16).ok()?;
+            let device = u8::from_str_radix(dev_fn[0], 16).ok()?;
+            let function = u8::from_str_radix(dev_fn[1], 16).ok()?;
+
+            DeviceAddress::Pcie {
+                domain,
+                bus,
+                device,
+                function,
+            }
         } else {
             return None;
         };
@@ -227,10 +271,19 @@ impl TuxDevice {
 
             DeviceAddress::Network { interface, .. } => interface.clone(),
 
-            DeviceAddress::Pci { .. } => {
-                // To be elaborated later
-                "PCI Device".to_string()
-            }
+            DeviceAddress::Pcie { .. } => dev
+                .property_value("ID_MODEL_FROM_DATABASE")
+                .and_then(|v| v.to_str())
+                .or_else(|| {
+                    dev.property_value("ID_PCI_SUBCLASS_FROM_DATABASE")
+                        .and_then(|v| v.to_str())
+                })
+                .or_else(|| {
+                    dev.property_value("ID_PCI_CLASS_FROM_DATABASE")
+                        .and_then(|v| v.to_str())
+                })
+                .unwrap_or(dev_sysname)
+                .to_string(),
         };
 
         Some(TuxDevice {
