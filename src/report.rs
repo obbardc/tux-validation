@@ -426,7 +426,6 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
 
     for bus in buses.iter().filter(|b| b.subsystem == Subsystem::Pci) {
         if bus.devices.is_empty() {
-            println!("  {}", "No PCIe devices detected.".yellow());
             continue;
         }
 
