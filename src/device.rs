@@ -27,7 +27,7 @@ pub enum DeviceAddress {
         interface: String, // e.g., "eth0"
         mac: String,       // e.g., "00:1a:2b:3c:4d:5e"
     },
-    Pcie {
+    Pci {
         domain: u16,  // e.g., 0000
         bus: u8,      // e.g., 00
         device: u8,   // e.g., 1f
@@ -69,7 +69,7 @@ pub enum DeviceDetails {
     I2c(I2cProperties),
     Ethernet(EthernetProperties),
     Wifi(WifiProperties),
-    Pcie(PcieProperties),
+    Pci(PcieProperties),
     None,
 }
 
@@ -232,7 +232,7 @@ impl TuxDevice {
             let device = u8::from_str_radix(dev_fn[0], 16).ok()?;
             let function = u8::from_str_radix(dev_fn[1], 16).ok()?;
 
-            DeviceAddress::Pcie {
+            DeviceAddress::Pci {
                 domain,
                 bus,
                 device,
@@ -271,7 +271,7 @@ impl TuxDevice {
 
             DeviceAddress::Network { interface, .. } => interface.clone(),
 
-            DeviceAddress::Pcie { .. } => dev
+            DeviceAddress::Pci { .. } => dev
                 .property_value("ID_MODEL_FROM_DATABASE")
                 .and_then(|v| v.to_str())
                 .or_else(|| {

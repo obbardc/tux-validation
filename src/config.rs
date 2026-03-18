@@ -47,3 +47,12 @@ pub struct NetworkExpectation {
     pub expected_ip: Option<String>,
     pub expected_ssid: Option<String>, // Only for WiFi
 }
+
+#[derive(Deserialize, Debug)]
+pub struct PciExpectation {
+    pub address: String,
+    pub device: Option<String>,
+    pub driver: Option<String>,
+    pub min_link_width: Option<u8>,
+    pub min_link_speed: Option<f32>,
+}
