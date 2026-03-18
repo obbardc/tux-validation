@@ -8,6 +8,8 @@ pub struct Config {
     pub i2c_devices: Vec<I2cExpectation>,
     #[serde(default)]
     pub network_devices: Vec<NetworkExpectation>,
+    #[serde(default)]
+    pub pci_devices: Vec<PciExpectation>,
 }
 
 //TODO: make all test fields optional?

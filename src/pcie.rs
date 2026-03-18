@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use udev::Enumerator;
 
-pub fn audit_pcie_subsystem() -> Result<Vec<TuxBus>> {
+pub fn audit_pci_subsystem() -> Result<Vec<TuxBus>> {
     let mut enumerator = Enumerator::new()?;
 
     // Not every devboard will have pci subsystem entries without plugged devices
