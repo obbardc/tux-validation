@@ -598,7 +598,7 @@ pub fn evaluate_pci_blueprint(
 
                 // Check Device Name (Hardware Model)
                 if let Some(expected_name) = &expected.device {
-                    let passed = &dev.name == expected_name;
+                    let passed = dev.name.contains(expected_name);
                     checks.push(FieldCheck {
                         name: "Hardware Model".into(),
                         passed,
