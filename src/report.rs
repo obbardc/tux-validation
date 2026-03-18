@@ -475,11 +475,16 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
 
                 // 3. Driver
                 let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
-                let driver_colored = if driver_name == "none" {
-                    driver_name.yellow().dimmed()
-                } else {
-                    driver_name.blue()
-                };
+                let mut driver_colored = driver_name.blue();
+                if let Some(r) = res
+                    && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
+                {
+                    driver_colored = if check.passed {
+                        driver_name.green().bold()
+                    } else {
+                        driver_name.red().bold()
+                    };
+                }
                 println!("    ┣━ Driver: {}", driver_colored);
 
                 // 4. Link Statistics (Handling True PCIe vs Integrated SoC blocks)

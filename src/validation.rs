@@ -1,4 +1,4 @@
-use crate::config::{I2cExpectation, NetworkExpectation, UsbExpectation};
+use crate::config::{I2cExpectation, NetworkExpectation, PciExpectation, UsbExpectation};
 use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice};
 use std::time::{Duration as CoreDuration, Instant};
 
@@ -530,4 +530,167 @@ fn verify_network_constraints(
     };
 
     (status, checks)
+}
+
+// Evaluates found PCI devices against expected blueprint.
+// Structured slightly different from previous validators for a change.
+// TODO: should probably make evaluation functions more uniform and look into reducing boilerplate
+pub fn evaluate_pci_blueprint(
+    buses: &[TuxBus],
+    blueprint: &[PciExpectation],
+) -> Vec<ValidationResult> {
+    let mut results = Vec::new();
+
+    // Flatten all PCI devices from all buses for easy searching
+    let all_pci_devices: Vec<_> = buses
+        .iter()
+        .filter(|b| b.subsystem == Subsystem::Pci)
+        .flat_map(|b| &b.devices)
+        .collect();
+
+    for expected in blueprint {
+        let start_time = Instant::now();
+        let target_id = TargetId::Pci {
+            address: expected.address.clone(),
+        };
+        let item_name = expected
+            .device
+            .clone()
+            .unwrap_or_else(|| "Unknown PCIe Device".into());
+
+        // Check Presence by parsing the BDF address back to a string
+        let found_device = all_pci_devices.iter().find(|dev| {
+            if let DeviceAddress::Pci {
+                domain,
+                bus,
+                device,
+                function,
+            } = &dev.address
+            {
+                let dev_bdf = format!("{:04x}:{:02x}:{:02x}.{:x}", domain, bus, device, function);
+                dev_bdf == expected.address
+            } else {
+                false
+            }
+        });
+
+        match found_device {
+            None => {
+                // MISSING CASE
+                results.push(ValidationResult {
+                    subsystem: "PCIe".into(),
+                    item_name,
+                    target_id,
+                    location: expected.address.clone(),
+                    status: AuditStatus::Missing {
+                        reason: format!(
+                            "No PCI device detected at BDF address {}",
+                            expected.address
+                        ),
+                    },
+                    checks: Vec::new(),
+                    duration: start_time.elapsed(),
+                });
+            }
+            Some(dev) => {
+                // FOUND CASE: Evaluate fields
+                let mut checks = Vec::new();
+
+                // Check Device Name (Hardware Model)
+                if let Some(expected_name) = &expected.device {
+                    let passed = &dev.name == expected_name;
+                    checks.push(FieldCheck {
+                        name: "Hardware Model".into(),
+                        passed,
+                        expected: expected_name.clone(),
+                        actual: dev.name.clone(),
+                    });
+                }
+
+                // Check Driver Bound
+                if let Some(expected_driver) = &expected.driver {
+                    let actual_driver = dev.status.driver_bound.as_deref().unwrap_or("None");
+                    checks.push(FieldCheck {
+                        name: "Driver".into(),
+                        passed: actual_driver == expected_driver,
+                        expected: expected_driver.clone(),
+                        actual: actual_driver.into(),
+                    });
+                }
+
+                // Check Link Width and Speed
+                if let DeviceDetails::Pci(props) = &dev.details {
+                    // Width Check
+                    if let Some(min_width) = expected.min_link_width {
+                        let actual_width_str = props
+                            .cur_link_width
+                            .map_or_else(|| "None".to_string(), |w| format!("x{}", w));
+                        let passed = props.cur_link_width.is_some_and(|w| w >= min_width);
+
+                        checks.push(FieldCheck {
+                            name: "PCIe Link Width".into(),
+                            passed,
+                            expected: format!(">= x{}", min_width),
+                            actual: actual_width_str,
+                        });
+                    }
+
+                    // Speed Check
+                    if let Some(min_speed) = expected.min_link_speed {
+                        let actual_speed_str = props
+                            .cur_link_speed
+                            .clone()
+                            .unwrap_or_else(|| "None".into());
+
+                        // Extract just the float part from the string (e.g., "16.0" from "16.0 GT/s PCIe")
+                        let cur_speed_val: f32 = props
+                            .cur_link_speed
+                            .as_ref()
+                            .and_then(|s| s.split_whitespace().next())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0.0);
+
+                        let passed = cur_speed_val >= min_speed;
+                        checks.push(FieldCheck {
+                            name: "PCIe Link Speed".into(),
+                            passed,
+                            expected: format!(">= {} GT/s", min_speed),
+                            actual: actual_speed_str,
+                        });
+                    }
+                }
+
+                let all_passed = checks.iter().all(|c| c.passed);
+                let status = if all_passed {
+                    AuditStatus::Pass
+                } else {
+                    let failed_msgs: Vec<String> = checks
+                        .iter()
+                        .filter(|c| !c.passed)
+                        .map(|c| {
+                            format!(
+                                "{} mismatch (Expected: {}, Got: {})",
+                                c.name, c.expected, c.actual
+                            )
+                        })
+                        .collect();
+                    AuditStatus::Fail {
+                        reason: failed_msgs.join(" | "),
+                        actual_value: "See reason".to_string(),
+                    }
+                };
+                results.push(ValidationResult {
+                    subsystem: "PCIe".into(),
+                    item_name: dev.name.clone(), // Use the actual detected name for the report
+                    target_id,
+                    location: expected.address.clone(), // BDF acts as the physical location
+                    status,
+                    checks,
+                    duration: start_time.elapsed(),
+                });
+            }
+        }
+    }
+
+    results
 }
