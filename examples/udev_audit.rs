@@ -7,12 +7,13 @@ use tux_validation::i2c::audit_all_i2c_buses;
 use tux_validation::network::audit_network_subsystem;
 use tux_validation::pcie::audit_pci_subsystem;
 use tux_validation::report::{
-    generate_junit_xml, print_annotated_i2c, print_annotated_network, print_annotated_usb_tree, print_annotated_pci,
-    print_xml_summary,
+    generate_junit_xml, print_annotated_i2c, print_annotated_network, print_annotated_pci,
+    print_annotated_usb_tree, print_xml_summary,
 };
 use tux_validation::usb::audit_usb_subsystem;
 use tux_validation::validation::{
-    ValidationResult, evaluate_i2c_blueprint, evaluate_network_blueprint, evaluate_usb_blueprint, evaluate_pci_blueprint
+    ValidationResult, evaluate_i2c_blueprint, evaluate_network_blueprint, evaluate_pci_blueprint,
+    evaluate_usb_blueprint,
 };
 
 #[derive(Parser)]
@@ -121,7 +122,8 @@ fn main() -> anyhow::Result<()> {
         .collect();
 
     if let Some(filepath) = args.xml_report.clone() {
-        let total_scan_duration = usb_scan_duration + i2c_scan_duration + net_scan_duration + pci_scan_duration;
+        let total_scan_duration =
+            usb_scan_duration + i2c_scan_duration + net_scan_duration + pci_scan_duration;
         generate_junit_xml(&all_results, &filepath, Some(total_scan_duration))?;
         if args.xml_summary {
             print_xml_summary(&filepath)?;
