@@ -111,7 +111,7 @@ fn main() -> anyhow::Result<()> {
         let pci_buses = audit_pci_subsystem()?;
         pci_scan_duration = pci_start.elapsed();
         pci_results = evaluate_pci_blueprint(&pci_buses, &config.pci_devices);
-        print_annotated_pci(&pci_buses, &network_results);
+        print_annotated_pci(&pci_buses, &pci_results);
     }
 
     let all_results: Vec<ValidationResult> = usb_results
