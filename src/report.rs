@@ -430,7 +430,17 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
             continue;
         }
 
-        for dev in &bus.devices {
+        // TODO:need sorting? Kinda expensive...
+        let mut devices = bus.devices.clone();
+        devices.sort_by(|a, b| {
+            if let (DeviceAddress::Pci { domain: d1, bus: b1, device: dev1, function: f1 },
+                    DeviceAddress::Pci { domain: d2, bus: b2, device: dev2, function: f2 }) = (&a.address, &b.address) {
+                (d1, b1, dev1, f1).cmp(&(d2, b2, dev2, f2))
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        for dev in &devices {
             if let DeviceDetails::Pci(props) = &dev.details {
                 // Reconstruct the BDF address from the structured enum
                 let bdf_addr = if let DeviceAddress::Pci {
