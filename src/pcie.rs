@@ -73,7 +73,7 @@ pub fn audit_pcie_subsystem() -> Result<Vec<TuxBus>> {
             // Ensure the hardware responding status is tied to the driver being loaded
             // (If a PCI device has no driver, it might just be a dummy stub or uninitialized)
             tux_dev.status.hw_responding = Some(tux_dev.status.driver_bound.is_some());
-            tux_dev.details = DeviceDetails::Pcie(details);
+            tux_dev.details = DeviceDetails::Pci(details);
 
             pci_devices.push(tux_dev);
         }

@@ -8,6 +8,7 @@ pub enum TargetId {
     Usb { vid: String, pid: String },
     I2c { bus: u8, address: u16 },
     Network { interface: String },
+    Pci { address: String },
 }
 
 /// The outcome of a single expectation check

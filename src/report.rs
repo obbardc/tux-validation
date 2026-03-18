@@ -420,6 +420,105 @@ fn print_network_interface_details(
     }
 }
 
+// Prints annotated PCI devices report
+pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
+    println!("\n{}", "=== PCIe SUBSYSTEM ===".bold().cyan());
+
+    for bus in buses.iter().filter(|b| b.subsystem == Subsystem::Pci) {
+        if bus.devices.is_empty() {
+            println!("  {}", "No PCIe devices detected.".yellow());
+            continue;
+        }
+
+        for dev in &bus.devices {
+            if let DeviceDetails::Pci(props) = &dev.details {
+                // Reconstruct the BDF address from the structured enum
+                let bdf_addr = if let DeviceAddress::Pci {
+                    domain,
+                    bus,
+                    device,
+                    function,
+                } = &dev.address
+                {
+                    format!("{:04x}:{:02x}:{:02x}.{:x}", domain, bus, device, function)
+                } else {
+                    "Unknown".to_string()
+                };
+
+                // Find the validation record for this specific BDF slot
+                let res = results.iter().find(|r| {
+                    if let TargetId::Pci { address } = &r.target_id {
+                        address == &bdf_addr
+                    } else {
+                        false
+                    }
+                });
+
+                // Determine the bullet point icon
+                let status_symbol = match res {
+                    Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
+                    Some(_) => "✖".red().bold(),
+                    None => "•".white(),
+                };
+
+                // 1. Header: Interface Name and BDF Address
+                println!(
+                    "  {} {} [{}]",
+                    status_symbol,
+                    dev.name.cyan(),
+                    bdf_addr.dimmed()
+                );
+
+                // 2. Hardware ID
+                let hw_id = format!("{}:{}", props.vendor_id, props.device_id);
+                println!("    ┣━ HW ID:  {}", hw_id.blue().dimmed());
+
+                // 3. Driver
+                let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
+                let driver_colored = if driver_name == "none" {
+                    driver_name.yellow().dimmed()
+                } else {
+                    driver_name.blue()
+                };
+                println!("    ┣━ Driver: {}", driver_colored);
+
+                // 4. Link Statistics (Handling True PCIe vs Integrated SoC blocks)
+                if let (Some(cur_speed), Some(cur_width)) =
+                    (&props.cur_link_speed, props.cur_link_width)
+                {
+                    let link_str = format!("{} @ x{}", cur_speed, cur_width);
+
+                    // Highlight if the device is electrically bottlenecked
+                    let is_bottlenecked =
+                        props.max_link_width.is_some_and(|max_w| cur_width < max_w);
+                    let mut link_colored = if is_bottlenecked {
+                        format!("{} (Bottlenecked!)", link_str).yellow()
+                    } else {
+                        link_str.blue()
+                    };
+
+                    // Override color if link parameters were tested:
+                    if let Some(r) = res {
+                        if r.checks
+                            .iter()
+                            .any(|c| c.name.contains("Link") && !c.passed)
+                        {
+                            link_colored = link_str.red().bold();
+                        } else if r.checks.iter().any(|c| c.name.contains("Link") && c.passed) {
+                            link_colored = link_str.green().bold();
+                        }
+                    }
+
+                    println!("    ┗━ Link:   {}", link_colored);
+                } else {
+                    // This hits devices without link data (integrated SoC?)
+                    println!("    ┗━ Link:   {}", "Integrated/Internal".dimmed());
+                }
+            }
+        }
+    }
+}
+
 /// Reads a JUnit XML file and prints a high-level summary to the terminal.
 pub fn print_xml_summary(filepath: &str) -> anyhow::Result<()> {
     // Read the file into a string
