@@ -64,14 +64,14 @@ fn property_colored_custom(
 ) -> ColoredString {
     let property_name = property.unwrap_or("none");
 
-    if let Some(r) = result {
-        if let Some(check) = r.checks.iter().find(|c| c.name == check_name) {
-            return if check.passed {
-                style(property_name.green())
-            } else {
-                style(property_name.red())
-            };
-        }
+    if let Some(r) = result
+        && let Some(check) = r.checks.iter().find(|c| c.name == check_name)
+    {
+        return if check.passed {
+            style(property_name.green())
+        } else {
+            style(property_name.red())
+        };
     }
 
     style(property_name.blue())
@@ -129,7 +129,7 @@ fn print_recursive_node(
         let status_symbol = test_status_symbol(res);
 
         let speed_colored = property_colored_bold(Some(&dev_props.speed), res, "Speed");
-        let port_colored = property_colored_custom(Some(&port_path), res, "Port", |s| s.dimmed());
+        let port_colored = property_colored_custom(Some(port_path), res, "Port", |s| s.dimmed());
 
         println!(
             "{}{} {} [{}:{}] at {} ({}M)",
