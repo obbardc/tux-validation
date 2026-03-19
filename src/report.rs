@@ -194,7 +194,7 @@ pub fn print_annotated_i2c(buses: &[TuxBus], results: &[ValidationResult]) {
 fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
     // Check dev is a I2C device and extract necessary parameters
     if let DeviceAddress::I2c { bus, address } = &dev.address {
-        let test_result = results.iter().find(|res| match &res.target_id {
+        let res = results.iter().find(|res| match &res.target_id {
             TargetId::I2c {
                 bus: res_bus,
                 address: res_address,
@@ -202,33 +202,39 @@ fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
             _ => false,
         });
 
-        let addr_str = format!("0x{:02x}", address);
-        let driver = dev.status.driver_bound.as_deref().unwrap_or("none");
+        // Determine the bullet point icon
+        let status_symbol = match res {
+            Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
+            Some(_) => "✖".red().bold(),
+            None => "•".white(),
+        };
+
+        // Header
+        println!(
+            "  {} {} [{}]",
+            status_symbol,
+            dev.name.cyan(),
+            format!("0x{:02x}", address).blue().dimmed()
+        );
+
+        // Hardware ACK/NACK and driver
         let hw_resp = match dev.status.hw_responding {
             Some(true) => format!(" (HW: {})", "ACK".green().bold()),
             Some(false) => format!(" (HW: {})", "NACK".red().bold()),
             None => "".to_string(), // Silently omit if we didn't probe
         };
 
-        let addr_colored = addr_str.blue().dimmed();
-        let dev_name_colored = dev.name.cyan();
-        let (driver_colored, newline_colored) = if let Some(res) = test_result {
-            let driver_check = res.checks.iter().find(|check| check.name == "Driver");
-            let d_color = match driver_check {
-                Some(check) if check.passed => driver.green().bold(),
-                Some(_) => driver.red().bold(),
-                None => driver.blue().bold(),
+        let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
+        let mut driver_colored = driver_name.blue();
+        if let Some(r) = res
+            && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
+        {
+            driver_colored = if check.passed {
+                driver_name.green().bold()
+            } else {
+                driver_name.red().bold()
             };
-
-            (d_color, "★".yellow())
-        } else {
-            // The defaults if no test result is found
-            (driver.blue().bold(), "•".white())
-        };
-        println!(
-            "  {} {} [{}]",
-            newline_colored, dev_name_colored, addr_colored
-        );
+        }
         println!("    ┗━ Driver: {}{}", driver_colored, hw_resp);
     }
 }
