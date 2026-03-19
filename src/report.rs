@@ -1,6 +1,6 @@
 use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface};
 use crate::validation::{AuditStatus, TargetId, ValidationResult};
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 use junit_report::{Duration as JunitDuration, Report, TestCase, TestSuite};
 use roxmltree::Document;
 use std::fs;
@@ -45,6 +45,48 @@ pub fn generate_junit_xml(
     Ok(())
 }
 
+/// Returns the bullet point icon for the printed results
+fn test_status_symbol(result: Option<&ValidationResult>) -> ColoredString {
+    match result {
+        Some(r) if matches!(r.status, AuditStatus::Pass) => "★".green(),
+        Some(_) => "✖".red().bold(),
+        None => "•".white(),
+    }
+}
+
+/// Returns a colored string representing a property based on a validation result check status.
+/// Accepts a lambda as a parameter to style the resulting colored string (e.g. bold, dimmed, italic etc.).
+fn property_colored_custom(
+    property: Option<&str>,
+    result: Option<&ValidationResult>,
+    check_name: &str,
+    style: impl Fn(ColoredString) -> ColoredString,
+) -> ColoredString {
+    let property_name = property.unwrap_or("none");
+
+    if let Some(r) = result {
+        if let Some(check) = r.checks.iter().find(|c| c.name == check_name) {
+            return if check.passed {
+                style(property_name.green())
+            } else {
+                style(property_name.red())
+            };
+        }
+    }
+
+    style(property_name.blue())
+}
+
+/// A specific version of `property_colored_custom`, printing string in bold.
+fn property_colored_bold(
+    property: Option<&str>,
+    result: Option<&ValidationResult>,
+    check_name: &str,
+) -> ColoredString {
+    // Calls the custom function with your standard blue default
+    property_colored_custom(property, result, check_name, |s| s.bold())
+}
+
 ///Prints annotated USB tree with detected devices and interfaces
 pub fn print_annotated_usb_tree(
     buses: &[TuxBus],
@@ -76,7 +118,7 @@ fn print_recursive_node(
             ..
         } = &dev.address
     {
-        let test_result = results.iter().find(|res| match &res.target_id {
+        let res = results.iter().find(|r| match &r.target_id {
             TargetId::Usb {
                 vid: res_vid,
                 pid: res_pid,
@@ -84,39 +126,15 @@ fn print_recursive_node(
             _ => false,
         });
 
-        let mut speed_colored = dev_props.speed.blue().bold();
-        let mut port_colored = port_path.blue().dimmed();
-        let mut newline_colored = "•".white();
-        if let Some(res) = test_result {
-            // Select PASS/FAIL/DEFAULT colors based on checks results
-            let speed_check = res.checks.iter().find(|check| check.name == "Speed");
-            speed_colored = match speed_check {
-                Some(speed_checked) => {
-                    if speed_checked.passed {
-                        dev_props.speed.green().bold()
-                    } else {
-                        dev_props.speed.red().bold()
-                    }
-                }
-                None => dev_props.speed.blue().bold(),
-            };
-            let port_check = res.checks.iter().find(|check| check.name == "Port");
-            port_colored = match port_check {
-                Some(port_checked) => {
-                    if port_checked.passed {
-                        port_path.green().dimmed()
-                    } else {
-                        port_path.red().dimmed()
-                    }
-                }
-                None => port_path.blue().dimmed(),
-            };
-            newline_colored = "★".yellow();
-        }
+        let status_symbol = test_status_symbol(res);
+
+        let speed_colored = property_colored_bold(Some(&dev_props.speed), res, "Speed");
+        let port_colored = property_colored_custom(Some(&port_path), res, "Port", |s| s.dimmed());
+
         println!(
             "{}{} {} [{}:{}] at {} ({}M)",
             indent,
-            newline_colored,
+            status_symbol,
             dev.name.cyan(),
             vid,
             pid,
@@ -135,7 +153,7 @@ fn print_recursive_node(
         }
         // Check and print interfaces data
         for iface in &dev_props.interfaces {
-            print_usb_interface(iface, &indent, test_result);
+            print_usb_interface(iface, &indent, res);
         }
     }
 
@@ -154,21 +172,8 @@ fn print_usb_interface(iface: &UsbInterface, indent: &str, result: Option<&Valid
         "ff" => "Vendor-Specific",
         _ => &iface.class,
     };
-    let dev_driver = iface.driver.as_deref().unwrap_or("none");
-    let mut driver_colored = dev_driver.blue().bold();
-    if let Some(res) = result {
-        let driver_check = res.checks.iter().find(|check| check.name == "Driver");
-        driver_colored = match driver_check {
-            Some(driver_checked) => {
-                if driver_checked.passed {
-                    dev_driver.green().bold()
-                } else {
-                    dev_driver.red().bold()
-                }
-            }
-            None => dev_driver.blue().bold(),
-        };
-    }
+
+    let driver_colored = property_colored_bold(iface.driver.as_deref(), result, "Driver");
 
     println!(
         "{}  ┗━ If {:02} [{}]: Driver {}",
@@ -202,12 +207,7 @@ fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
             _ => false,
         });
 
-        // Determine the bullet point icon
-        let status_symbol = match res {
-            Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
-            Some(_) => "✖".red().bold(),
-            None => "•".white(),
-        };
+        let status_symbol = test_status_symbol(res);
 
         // Header
         println!(
@@ -224,17 +224,9 @@ fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
             None => "".to_string(), // Silently omit if we didn't probe
         };
 
-        let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
-        let mut driver_colored = driver_name.blue();
-        if let Some(r) = res
-            && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
-        {
-            driver_colored = if check.passed {
-                driver_name.green().bold()
-            } else {
-                driver_name.red().bold()
-            };
-        }
+        let driver_colored =
+            property_colored_bold(dev.status.driver_bound.as_deref(), res, "Driver");
+
         println!("    ┗━ Driver: {}{}", driver_colored, hw_resp);
     }
 }
@@ -302,12 +294,7 @@ fn print_network_interface_details(
         }
     });
 
-    // Determine the bullet point icon and color based on overall status
-    let status_symbol = match res {
-        Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
-        Some(_) => "✖".red().bold(), // TODO: should I do the same for other devices?
-        None => "•".white(),
-    };
+    let status_symbol = test_status_symbol(res);
 
     // 1. Header: Interface Name and Physical Link Status
     let link_text = if link_detected {
@@ -319,46 +306,19 @@ fn print_network_interface_details(
 
     // 2. MAC Address Line
     if let DeviceAddress::Network { mac, .. } = &dev.address {
-        let mut mac_colored = mac.blue().dimmed();
-        if let Some(r) = res
-            && let Some(check) = r.checks.iter().find(|c| c.name == "Mac Address")
-        {
-            mac_colored = if check.passed {
-                mac.green().dimmed()
-            } else {
-                mac.red().dimmed()
-            };
-        }
+        let mac_colored = property_colored_custom(Some(mac), res, "Mac Address", |s| s.dimmed());
         println!("    ┣━ MAC:    {}", mac_colored);
     }
 
     // 3. Driver
-    let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
-    let mut driver_colored = driver_name.blue();
-    if let Some(r) = res
-        && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
-    {
-        driver_colored = if check.passed {
-            driver_name.green().bold()
-        } else {
-            driver_name.red().bold()
-        };
-    }
+    let driver_colored = property_colored_bold(dev.status.driver_bound.as_deref(), res, "Driver");
     println!("    ┣━ Driver: {}", driver_colored);
 
     // 4. IP Addresses
     if !ipv4.is_empty() {
         let ipv4_str = ipv4.join(", ");
-        let mut ipv4_colored = ipv4_str.blue().dimmed();
-        if let Some(r) = res
-            && let Some(check) = r.checks.iter().find(|c| c.name == "IPv4 Check")
-        {
-            ipv4_colored = if check.passed {
-                ipv4_str.green().dimmed()
-            } else {
-                ipv4_str.red().dimmed()
-            };
-        }
+        let ipv4_colored =
+            property_colored_custom(Some(&ipv4_str), res, "IPv4 Check", |s| s.dimmed());
         println!("    ┣━ IPv4:   {}", ipv4_colored);
     } else {
         println!("    ┣━ IPv4:   {}", "none".yellow().dimmed());
@@ -373,16 +333,7 @@ fn print_network_interface_details(
     if let DeviceDetails::Wifi(props) = &dev.details {
         // SSID with Validation Coloring
         if let Some(ssid) = &props.ssid {
-            let mut ssid_colored = ssid.blue().bold();
-            if let Some(r) = res
-                && let Some(check) = r.checks.iter().find(|c| c.name == "SSID")
-            {
-                ssid_colored = if check.passed {
-                    ssid.green().bold()
-                } else {
-                    ssid.red().bold()
-                };
-            }
+            let ssid_colored = property_colored_bold(Some(ssid), res, "SSID");
             println!("    ┣━ SSID:   {}", ssid_colored);
         }
 
@@ -407,19 +358,10 @@ fn print_network_interface_details(
     // Speed & Duplex
     if link_detected {
         let speed_str = speed.map_or("Connected".to_string(), |s| format!("{} Mbps", s));
-        let mut speed_colored = speed_str.blue();
+        let speed_colored = property_colored_bold(Some(&speed_str), res, "Speed");
         let duplex_colored = duplex
             .map_or("".to_string(), |d| format!("({})", d))
             .yellow();
-        if let Some(r) = res
-            && let Some(check) = r.checks.iter().find(|c| c.name == "Speed")
-        {
-            speed_colored = if check.passed {
-                speed_str.green().bold()
-            } else {
-                speed_str.red().bold()
-            };
-        }
         println!("    ┗━ Config: {} {}", speed_colored, duplex_colored);
     } else {
         println!("    ┗━ Config: {}", "No Carrier".red().dimmed());
@@ -482,12 +424,7 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
                     }
                 });
 
-                // Determine the bullet point icon
-                let status_symbol = match res {
-                    Some(r) if matches!(r.status, AuditStatus::Pass) => "★".yellow(),
-                    Some(_) => "✖".red().bold(),
-                    None => "•".white(),
-                };
+                let status_symbol = test_status_symbol(res);
 
                 // 1. Header: Interface Name and BDF Address
                 println!(
@@ -502,17 +439,8 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
                 println!("    ┣━ HW ID:  {}", hw_id.blue().dimmed());
 
                 // 3. Driver
-                let driver_name = dev.status.driver_bound.as_deref().unwrap_or("none");
-                let mut driver_colored = driver_name.blue();
-                if let Some(r) = res
-                    && let Some(check) = r.checks.iter().find(|c| c.name == "Driver")
-                {
-                    driver_colored = if check.passed {
-                        driver_name.green().bold()
-                    } else {
-                        driver_name.red().bold()
-                    };
-                }
+                let driver_colored =
+                    property_colored_bold(dev.status.driver_bound.as_deref(), res, "Driver");
                 println!("    ┣━ Driver: {}", driver_colored);
 
                 // 4. Link Statistics (Handling True PCIe vs Integrated SoC blocks)
