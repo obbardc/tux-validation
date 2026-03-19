@@ -539,7 +539,14 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
                     println!("    ┗━ Link:   {}", link_colored);
                 } else {
                     // This hits devices without link data (integrated SoC?)
-                    println!("    ┗━ Link:   {}", "Integrated/Internal".dimmed());
+                    let link_colored = if let Some(r) = res
+                        && r.checks.iter().any(|c| c.name.contains("Link"))
+                    {
+                        "Integrated/Internal".red().dimmed()
+                    } else {
+                        "Integrated/Internal".dimmed()
+                    };
+                    println!("    ┗━ Link:   {}", link_colored);
                 }
             }
         }

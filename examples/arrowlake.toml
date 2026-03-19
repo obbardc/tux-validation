@@ -1,0 +1,12 @@
+[[pci_devices]]
+address = "0000:01:00.0"
+device = "NVMe SSD Controller PM9C1a"
+driver = "nvme"
+min_link_width = 4
+min_link_speed = 16.0
+
+[[pci_devices]]
+address = "0000:00:14.3"
+device = "Network controller"
+driver = "iwlwifi"
+min_link_width = 1
