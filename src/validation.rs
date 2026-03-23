@@ -9,6 +9,7 @@ pub enum TargetId {
     I2c { bus: u8, address: u16 },
     Network { interface: String },
     Pci { address: String },
+    Systemd { service: String },
 }
 
 /// The outcome of a single expectation check
