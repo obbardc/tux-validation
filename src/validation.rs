@@ -1,5 +1,8 @@
-use crate::config::{I2cExpectation, NetworkExpectation, PciExpectation, UsbExpectation};
+use crate::config::{
+    I2cExpectation, NetworkExpectation, PciExpectation, SystemdExpectation, UsbExpectation,
+};
 use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice};
+use crate::systemd::SystemdService;
 use std::time::{Duration as CoreDuration, Instant};
 
 /// A generic way to identify what hardware a particular test was looking for
@@ -691,6 +694,92 @@ pub fn evaluate_pci_blueprint(
                 });
             }
         }
+    }
+
+    results
+}
+
+pub fn evaluate_systemd_blueprint(
+    scanned_services: &[SystemdService],
+    blueprint: &[SystemdExpectation],
+) -> Vec<ValidationResult> {
+    let mut results = Vec::new();
+
+    for exp in blueprint {
+        let start_time = Instant::now();
+        let mut checks = Vec::new();
+
+        // Find the matching scraped service
+        let target_service = scanned_services.iter().find(|s| s.name == exp.name);
+
+        let status = if let Some(service) = target_service {
+            if service.exists {
+                let active = service.active_state.as_deref().unwrap_or("unknown");
+                let sub = service.sub_state.as_deref().unwrap_or("unknown");
+
+                if let Some(expected_active) = &exp.active_state {
+                    checks.push(FieldCheck {
+                        name: "ActiveState".into(),
+                        passed: active == expected_active,
+                        expected: expected_active.clone(),
+                        actual: active.to_string(),
+                    });
+                }
+
+                if let Some(expected_sub) = &exp.sub_state {
+                    checks.push(FieldCheck {
+                        name: "SubState".into(),
+                        passed: sub == expected_sub,
+                        expected: expected_sub.clone(),
+                        actual: sub.to_string(),
+                    });
+                }
+
+                let all_passed = checks.iter().all(|c| c.passed);
+                if all_passed {
+                    AuditStatus::Pass
+                } else {
+                    let failed_msgs: Vec<String> = checks
+                        .iter()
+                        .filter(|c| !c.passed)
+                        .map(|c| {
+                            format!(
+                                "{} mismatch (Expected: {}, got: {})",
+                                c.name, c.expected, c.actual
+                            )
+                        })
+                        .collect();
+
+                    AuditStatus::Fail {
+                        reason: failed_msgs.join(" | "),
+                        actual_value: "See reason".to_string(),
+                    }
+                }
+            } else {
+                AuditStatus::Missing {
+                    reason: format!("Service '{}' not found or not loaded by systemd", exp.name),
+                }
+            }
+        } else {
+            AuditStatus::Missing {
+                reason: format!(
+                    "Service '{}' was not queried during the audit phase",
+                    exp.name
+                ),
+            }
+        };
+
+        results.push(ValidationResult {
+            subsystem: "Systemd".to_string(),
+            item_name: exp.name.clone(),
+            target_id: TargetId::Systemd {
+                service: exp.name.clone(),
+            },
+            location: "D-Bus".to_string(),
+            status,
+            checks,
+            duration: start_time.elapsed(),
+        });
     }
 
     results
