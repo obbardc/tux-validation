@@ -10,6 +10,8 @@ pub struct Config {
     pub network_devices: Vec<NetworkExpectation>,
     #[serde(default)]
     pub pci_devices: Vec<PciExpectation>,
+    #[serde(default)]
+    pub systemd_services: Vec<SystemdExpectation>,
 }
 
 //TODO: make all test fields optional?
@@ -57,4 +59,11 @@ pub struct PciExpectation {
     pub driver: Option<String>,
     pub min_link_width: Option<u8>,
     pub min_link_speed: Option<f32>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SystemdExpectation {
+    pub name: String,                 // e.g., "NetworkManager.service"
+    pub active_state: Option<String>, // e.g., "active", "inactive", "failed"
+    pub sub_state: Option<String>,    // e.g., "running", "exited", "dead"
 }
