@@ -1,4 +1,5 @@
 use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface};
+use crate::systemd::SystemdService;
 use crate::validation::{AuditStatus, TargetId, ValidationResult};
 use colored::{ColoredString, Colorize};
 use junit_report::{Duration as JunitDuration, Report, TestCase, TestSuite};
@@ -484,6 +485,47 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
                 }
             }
         }
+    }
+}
+
+pub fn print_annotated_systemd(services: &[SystemdService], results: &[ValidationResult]) {
+    if services.is_empty() {
+        return;
+    }
+
+    println!("\n{}", "=== SYSTEMD SERVICES ===".bold().cyan());
+
+    for service in services {
+        // Look up the validation result for this specific service (if any exists)
+        let res = results.iter().find(|r| match &r.target_id {
+            TargetId::Systemd {
+                service: target_name,
+            } => target_name == &service.name,
+            _ => false,
+        });
+
+        let status_symbol = test_status_symbol(res);
+
+        if !service.exists {
+            println!(
+                "  {} {} -> {}",
+                status_symbol,
+                service.name.cyan(),
+                "NOT FOUND / NOT LOADED".red().dimmed()
+            );
+            continue;
+        }
+
+        println!("  {} {}", status_symbol, service.name.cyan());
+
+        let active = service.active_state.as_deref().unwrap_or("unknown");
+        let sub = service.sub_state.as_deref().unwrap_or("unknown");
+
+        let active_colored = property_colored_bold(Some(active), res, "ActiveState");
+        let sub_colored = property_colored_bold(Some(sub), res, "SubState");
+
+        println!("    ┣━ Active: {}", active_colored);
+        println!("    ┗━ Sub:    {}", sub_colored);
     }
 }
 

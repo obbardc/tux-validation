@@ -10,3 +10,25 @@ address = "0000:00:14.3"
 device = "Network controller"
 driver = "iwlwifi"
 min_link_width = 1
+
+[[systemd_services]]
+name = "dbus.service"
+active_state = "active"
+sub_state = "running"
+
+[[systemd_services]]
+name = "systemd-journald.service"
+active_state = "active"
+
+[[systemd_services]]
+name = "NetworkManager.service"
+
+[[systemd_services]]
+name = "sshd.service"
+active_state = "active"
+sub_state = "running"
+
+
+[[systemd_services]]
+name = "totally-fake-daemon.service"
+
