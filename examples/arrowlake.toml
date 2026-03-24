@@ -13,6 +13,7 @@ min_link_width = 1
 
 [[systemd_services]]
 name = "dbus.service"
+load_state = "loaded"
 active_state = "active"
 sub_state = "running"
 
