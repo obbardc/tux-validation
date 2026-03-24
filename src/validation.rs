@@ -714,8 +714,18 @@ pub fn evaluate_systemd_blueprint(
 
         let status = if let Some(service) = target_service {
             if service.exists {
+                let load = service.load_state.as_deref().unwrap_or("unknown");
                 let active = service.active_state.as_deref().unwrap_or("unknown");
                 let sub = service.sub_state.as_deref().unwrap_or("unknown");
+
+                if let Some(expected_load) = &exp.load_state {
+                    checks.push(FieldCheck {
+                        name: "LoadState".into(),
+                        passed: load == expected_load,
+                        expected: expected_load.clone(),
+                        actual: load.to_string(),
+                    });
+                }
 
                 if let Some(expected_active) = &exp.active_state {
                     checks.push(FieldCheck {

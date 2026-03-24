@@ -515,19 +515,31 @@ pub fn print_annotated_systemd(services: &[SystemdService], results: &[Validatio
                 "  {} {} -> {}",
                 status_symbol,
                 service.name.cyan(),
-                "NOT FOUND / NOT LOADED".red().dimmed()
+                "NO RECORD IN SYSTEMD".red().dimmed()
             );
             continue;
         }
 
-        println!("  {} {}", status_symbol, service.name.cyan());
+        let desc = service
+            .description
+            .as_deref()
+            .unwrap_or("No description available");
+        println!(
+            "  {} {} {}",
+            status_symbol,
+            service.name.cyan(),
+            format!("({})", desc).dimmed()
+        );
 
+        let load = service.load_state.as_deref().unwrap_or("unknown");
         let active = service.active_state.as_deref().unwrap_or("unknown");
         let sub = service.sub_state.as_deref().unwrap_or("unknown");
 
+        let load_colored = property_colored_bold(Some(load), res, "LoadState");
         let active_colored = property_colored_bold(Some(active), res, "ActiveState");
         let sub_colored = property_colored_bold(Some(sub), res, "SubState");
 
+        println!("    ┣━ Load:   {}", load_colored);
         println!("    ┣━ Active: {}", active_colored);
         println!("    ┗━ Sub:    {}", sub_colored);
     }

@@ -64,6 +64,8 @@ pub struct PciExpectation {
 #[derive(Deserialize, Debug)]
 pub struct SystemdExpectation {
     pub name: String,                 // e.g., "NetworkManager.service"
-    pub active_state: Option<String>, // e.g., "active", "inactive", "failed"
+    pub description: Option<String>,  // metadata
+    pub load_state: Option<String>, // e.g., "loaded", "not-found", "bad-setting", "error", "masked"
+    pub active_state: Option<String>, // e.g., "active", "reloading", "inactive", "failed", "activating", "deactivating"
     pub sub_state: Option<String>,    // e.g., "running", "exited", "dead"
 }

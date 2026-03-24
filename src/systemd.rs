@@ -4,6 +4,8 @@ use zbus::{blocking::Connection, proxy};
 pub struct SystemdService {
     pub name: String,
     pub exists: bool,
+    pub description: Option<String>,
+    pub load_state: Option<String>,
     pub active_state: Option<String>,
     pub sub_state: Option<String>,
 }
@@ -22,6 +24,12 @@ trait SystemdManager {
     default_service = "org.freedesktop.systemd1"
 )]
 trait SystemdUnit {
+    #[zbus(property)]
+    fn description(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn load_state(&self) -> zbus::Result<String>;
+
     #[zbus(property)]
     fn active_state(&self) -> zbus::Result<String>;
 
@@ -44,12 +52,16 @@ pub fn audit_systemd_services(service_names: &[String]) -> anyhow::Result<Vec<Sy
                     .path(path)?
                     .build()?;
 
+                let description = unit_proxy.description().ok();
+                let load_state = unit_proxy.load_state().ok();
                 let active_state = unit_proxy.active_state().ok();
                 let sub_state = unit_proxy.sub_state().ok();
 
                 scanned_services.push(SystemdService {
                     name: name.clone(),
                     exists: true,
+                    description,
+                    load_state,
                     active_state,
                     sub_state,
                 });
@@ -61,6 +73,8 @@ pub fn audit_systemd_services(service_names: &[String]) -> anyhow::Result<Vec<Sy
                 scanned_services.push(SystemdService {
                     name: name.clone(),
                     exists: false,
+                    description: None,
+                    load_state: None,
                     active_state: None,
                     sub_state: None,
                 });
