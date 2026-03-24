@@ -73,7 +73,13 @@ fn main() -> anyhow::Result<()> {
 
         // Generate XML (if requested)
         if let Some(xml_path) = args.xml_report {
-            generate_junit_xml(&results, &xml_path, Some(scan_duration))?;
+            generate_junit_xml(
+                &results,
+                &xml_path,
+                Some(scan_duration),
+                "Systemd Audit",
+                "Systemd: Service Discovery",
+            )?;
             if args.xml_summary {
                 print_xml_summary(&xml_path)?;
             }

@@ -124,7 +124,13 @@ fn main() -> anyhow::Result<()> {
     if let Some(filepath) = args.xml_report.clone() {
         let total_scan_duration =
             usb_scan_duration + i2c_scan_duration + net_scan_duration + pci_scan_duration;
-        generate_junit_xml(&all_results, &filepath, Some(total_scan_duration))?;
+        generate_junit_xml(
+            &all_results,
+            &filepath,
+            Some(total_scan_duration),
+            "System Audit",
+            "System: Full Discovery (Scan)",
+        )?;
         if args.xml_summary {
             print_xml_summary(&filepath)?;
         }

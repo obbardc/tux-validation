@@ -12,17 +12,16 @@ pub fn generate_junit_xml(
     results: &[ValidationResult],
     filepath: &str,
     scan_duration: Option<CoreDuration>,
+    suite_name: &str,
+    scan_name: &str,
 ) -> anyhow::Result<()> {
     let mut report = Report::new();
-    let mut suite = TestSuite::new("Hardware Audit");
+    let mut suite = TestSuite::new(suite_name);
 
     if let Some(duration) = scan_duration {
         let scan_time =
             JunitDuration::try_from(duration).unwrap_or_else(|_| JunitDuration::milliseconds(1));
-        suite.add_testcase(TestCase::success(
-            "System: Hardware Discovery (Scan)",
-            scan_time,
-        ));
+        suite.add_testcase(TestCase::success(scan_name, scan_time));
     }
 
     for res in results {
@@ -34,7 +33,12 @@ pub fn generate_junit_xml(
         let case = match &res.status {
             AuditStatus::Pass => TestCase::success(&test_name, test_time),
             AuditStatus::Fail { reason, .. } | AuditStatus::Missing { reason } => {
-                TestCase::failure(&test_name, test_time, "HardwareError", reason)
+                let error_type = if res.subsystem == "Systemd" {
+                    "ServiceError"
+                } else {
+                    "HardwareError"
+                };
+                TestCase::failure(&test_name, test_time, error_type, reason)
             }
         };
         suite.add_testcase(case);
