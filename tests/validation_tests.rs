@@ -309,3 +309,96 @@ fn test_evaluate_pci_blueprint_fails_and_misses() {
     // Assert second test on NVMe is flagged as Missing
     assert!(matches!(results[1].status, AuditStatus::Missing { .. }));
 }
+
+// Network tests
+
+use tux_validation::config::NetworkExpectation;
+use tux_validation::device::EthernetProperties;
+use tux_validation::validation::evaluate_network_blueprint;
+
+/// Helper to spin up a fake Ethernet device
+fn create_mock_eth_device(
+    name: &str,
+    mac: &str,
+    driver: Option<&str>,
+    link_up: bool,
+    speed: u32,
+    ips: Vec<&str>,
+) -> TuxDevice {
+    TuxDevice {
+        name: name.to_string(),
+        address: DeviceAddress::Network {
+            interface: name.to_string(),
+            mac: mac.to_string(),
+        },
+        status: DeviceStatus {
+            in_udev: true,
+            hw_responding: Some(link_up), // Carrier
+            driver_bound: driver.map(|s| s.to_string()),
+        },
+        details: DeviceDetails::Ethernet(EthernetProperties {
+            speed,
+            duplex: "full".into(),
+            link_detected: link_up,
+            pci_bus_id: Some("0000:02:00.0".into()),
+            operstate: if link_up { "up".into() } else { "down".into() },
+            ipv4_address: ips.iter().map(|s| s.to_string()).collect(),
+            ipv6_address: vec![],
+            dhcp_enabled: !ips.is_empty(),
+            firmware_version: None,
+        }),
+        children: vec![],
+        attributes: HashMap::new(),
+    }
+}
+
+#[test]
+fn test_evaluate_network_blueprint_fails_on_speed_drop() {
+    // eth0 is physically plugged in, got an IP, but negotiated a bad 100Mbps link
+    let eth0 = create_mock_eth_device(
+        "eth0",
+        "aa:bb:cc:dd:ee:ff",
+        Some("igb"),
+        true,
+        100,
+        vec!["192.168.1.50"],
+    );
+
+    let net_bus = TuxBus {
+        name: "Network".into(),
+        subsystem: Subsystem::Net,
+        id: "0".into(),
+        devices: vec![eth0],
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    };
+
+    let expectation = vec![NetworkExpectation {
+        interface_name: "eth0".into(),
+        link_status: true, // Expecting carrier
+        speed: Some(1000), // Expecting Gigabit! (This should fail)
+        driver: Some("igb".into()),
+        mac_address: Some("aa:bb:cc:dd:ee:ff".into()),
+        expected_ip: None,
+        expected_ssid: None,
+    }];
+
+    let results = evaluate_network_blueprint(&[net_bus], &expectation);
+
+    assert_eq!(results.len(), 1);
+
+    // It should fail specifically because 100 < 1000
+    if let AuditStatus::Fail { reason, .. } = &results[0].status {
+        assert!(reason.contains("Speed mismatch"));
+    } else {
+        panic!("Network test passed when it should have failed on speed bottleneck");
+    }
+
+    // Check that the MAC address test specifically passed despite the speed failure
+    let mac_check = results[0]
+        .checks
+        .iter()
+        .find(|c| c.name == "MAC Address")
+        .unwrap();
+    assert!(mac_check.passed);
+}
