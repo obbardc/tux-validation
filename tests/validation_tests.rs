@@ -8,7 +8,9 @@ use tux_validation::validation::{
     AuditStatus, evaluate_usb_blueprint, find_usb_device, verify_usb_constraints,
 };
 
-// Helper function to spin up a fake USB device in memory
+// USB tests
+
+/// Helper function to spin up a fake USB device in memory
 fn create_mock_usb_device(
     vid: &str,
     pid: &str,
@@ -45,7 +47,7 @@ fn create_mock_usb_device(
     }
 }
 
-// Builds a realistic TuxBus with a nested topology
+/// Builds a realistic TuxBus with a nested topology
 fn create_mock_usb_bus() -> TuxBus {
     // Child Device (e.g., a mouse plugged into the hub)
     let mouse = create_mock_usb_device("046d", "c077", "1-1", "12", Some("usbhid"), vec![]);
@@ -122,7 +124,7 @@ fn test_find_usb_device_tree_traversal() {
 }
 
 #[test]
-fn test_evaluate_usb_blueprint_pipeline() {
+fn test_evaluate_usb_blueprint() {
     let buses = vec![create_mock_usb_bus()];
 
     // A blueprint asking for one real device and one fake device
@@ -162,4 +164,148 @@ fn test_evaluate_usb_blueprint_pipeline() {
         matches!(cam_res.status, AuditStatus::Missing { .. }),
         "Missing webcam was not flagged as Missing"
     );
+}
+
+// PCIe tests
+
+use tux_validation::config::PciExpectation;
+use tux_validation::device::PcieProperties;
+use tux_validation::validation::evaluate_pci_blueprint;
+
+/// Helper to spin up a fake PCIe device
+fn create_mock_pci_device(
+    domain: u16,
+    bus: u8,
+    device: u8,
+    function: u8,
+    name: &str,
+    driver: Option<&str>,
+    cur_speed: Option<&str>,
+    cur_width: Option<u8>,
+) -> TuxDevice {
+    TuxDevice {
+        name: name.to_string(),
+        address: DeviceAddress::Pci {
+            domain,
+            bus,
+            device,
+            function,
+        },
+        status: DeviceStatus {
+            in_udev: true,
+            hw_responding: Some(driver.is_some()),
+            driver_bound: driver.map(|s| s.to_string()),
+        },
+        details: DeviceDetails::Pci(PcieProperties {
+            vendor_id: "0x10de".into(),
+            device_id: "0x1b80".into(),
+            vendor_name: "Mock Vendor".into(),
+            device_name: "Mock Device".into(),
+            class_name: "VGA compatible controller".into(),
+            revision: "0xa1".into(),
+            max_link_speed: Some("16.0 GT/s PCIe".into()),
+            cur_link_speed: cur_speed.map(|s| s.to_string()),
+            max_link_width: Some(16),
+            cur_link_width: cur_width,
+        }),
+        children: vec![],
+        attributes: HashMap::new(),
+    }
+}
+
+#[test]
+fn test_evaluate_pci_blueprint_passes() {
+    // A healthy GPU running at full x16 Gen4 speed
+    let gpu = create_mock_pci_device(
+        0x0000,
+        0x01,
+        0x00,
+        0x0,
+        "NVIDIA GeForce GTX 1080",
+        Some("nouveau"),
+        Some("16.0 GT/s PCIe"),
+        Some(16),
+    );
+
+    let pci_bus = TuxBus {
+        name: "PCIe Bus".into(),
+        subsystem: Subsystem::Pci,
+        id: "0".into(),
+        devices: vec![gpu],
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    };
+
+    let expectation = vec![PciExpectation {
+        address: "0000:01:00.0".into(),
+        device: Some("NVIDIA".into()),
+        driver: Some("nouveau".into()),
+        min_link_width: Some(16),
+        min_link_speed: Some(16.0),
+    }];
+
+    let results = evaluate_pci_blueprint(&[pci_bus], &expectation);
+
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].status, AuditStatus::Pass));
+}
+
+#[test]
+fn test_evaluate_pci_blueprint_fails_and_misses() {
+    // GPU is seated poorly or sharing lanes: Negotiated at x8 instead of x16
+    let bottlenecked_gpu = create_mock_pci_device(
+        0x0000,
+        0x01,
+        0x00,
+        0x0,
+        "NVIDIA GeForce GTX 1080",
+        Some("nouveau"),
+        Some("16.0 GT/s PCIe"),
+        Some(8), // <-- Only 8 lanes active!
+    );
+
+    let pci_bus = TuxBus {
+        name: "PCIe Bus".into(),
+        subsystem: Subsystem::Pci,
+        id: "0".into(),
+        devices: vec![bottlenecked_gpu],
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    };
+
+    let expectations = vec![
+        PciExpectation {
+            address: "0000:01:00.0".into(),
+            device: None,
+            driver: None,
+            min_link_width: Some(16), // Expecting full x16 bandwidth
+            min_link_speed: None,
+        },
+        PciExpectation {
+            address: "0000:04:00.0".into(), // A missing NVMe drive
+            device: Some("Samsung NVMe".into()),
+            driver: None,
+            min_link_width: None,
+            min_link_speed: None,
+        },
+    ];
+
+    let results = evaluate_pci_blueprint(&[pci_bus], &expectations);
+
+    assert_eq!(results.len(), 2);
+
+    // Assert the first test failed
+    assert!(matches!(results[0].status, AuditStatus::Fail { .. }));
+
+    // Assert it failed specifically because of the Link Width
+    let width_check = results[0]
+        .checks
+        .iter()
+        .find(|c| c.name == "PCIe Link Width")
+        .unwrap();
+    assert!(!width_check.passed);
+    assert_eq!(width_check.actual, "x8");
+
+    // Assert second test on NVMe is flagged as Missing
+    assert!(matches!(results[1].status, AuditStatus::Missing { .. }));
 }
