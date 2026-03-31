@@ -531,3 +531,115 @@ fn test_evaluate_network_blueprint_wifi_fails_wrong_ssid() {
     assert_eq!(ssid_check.expected, "Corp_IoT_Net");
     assert_eq!(ssid_check.actual, "Public_Guest_Wifi");
 }
+
+use tux_validation::config::I2cExpectation;
+use tux_validation::device::I2cProperties;
+use tux_validation::validation::evaluate_i2c_blueprint;
+
+// Helper to spin up a fake I2C device
+fn create_mock_i2c_device(
+    bus: u8,
+    address: u16,
+    name: &str,
+    driver: Option<&str>,
+    hw_ack: Option<bool>,
+) -> TuxDevice {
+    TuxDevice {
+        name: name.to_string(),
+        address: DeviceAddress::I2c { bus, address },
+        status: DeviceStatus {
+            in_udev: true,
+            hw_responding: hw_ack,
+            driver_bound: driver.map(|s| s.to_string()),
+        },
+        details: DeviceDetails::I2c(I2cProperties),
+        children: vec![],
+        attributes: HashMap::new(),
+    }
+}
+
+// Helper to wrap I2C devices into a bus
+fn create_mock_i2c_bus(bus_id: u8, devices: Vec<TuxDevice>) -> TuxBus {
+    TuxBus {
+        name: format!("i2c-{}", bus_id),
+        subsystem: Subsystem::I2c,
+        id: bus_id.to_string(),
+        devices,
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    }
+}
+
+#[test]
+fn test_evaluate_i2c_blueprint_passes() {
+    // A healthy RTC chip at 0x32 on Bus 7
+    let rtc = create_mock_i2c_device(7, 0x32, "rx8010", Some("rtc-rx8010"), Some(true));
+    let bus7 = create_mock_i2c_bus(7, vec![rtc]);
+
+    let expectation = vec![I2cExpectation {
+        name: "Real-Time Clock".into(),
+        bus: 7,
+        address: "0x32".into(), // Blueprint uses hex strings
+        required_driver: Some("rtc-rx8010".into()),
+    }];
+
+    let results = evaluate_i2c_blueprint(&[bus7], &expectation);
+
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].status, AuditStatus::Pass));
+
+    // Check that the hardware probe field specifically passed
+    let hw_check = results[0]
+        .checks
+        .iter()
+        .find(|c| c.name == "Hardware Probe")
+        .unwrap();
+    assert!(hw_check.passed);
+}
+
+#[test]
+fn test_evaluate_i2c_blueprint_fails_hw_nack() {
+    // A power management IC that is bound to a driver, but the physical chip is dead/unseated (NACK)
+    let pmic = create_mock_i2c_device(0, 0x1b, "rk808", Some("rk808"), Some(false));
+    let bus0 = create_mock_i2c_bus(0, vec![pmic]);
+
+    let expectation = vec![I2cExpectation {
+        name: "Power Management IC".into(),
+        bus: 0,
+        address: "0x1b".into(),
+        required_driver: Some("rk808".into()),
+    }];
+
+    let results = evaluate_i2c_blueprint(&[bus0], &expectation);
+
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].status, AuditStatus::Fail { .. }));
+
+    // Verify it failed specifically because of the Hardware Probe (NACK)
+    let hw_check = results[0]
+        .checks
+        .iter()
+        .find(|c| c.name == "Hardware Probe")
+        .unwrap();
+    assert!(!hw_check.passed);
+    assert_eq!(hw_check.actual, "false");
+}
+
+#[test]
+fn test_evaluate_i2c_blueprint_handles_missing_device() {
+    // An empty I2C bus
+    let bus2 = create_mock_i2c_bus(2, vec![]);
+
+    let expectation = vec![I2cExpectation {
+        name: "Missing Temp Sensor".into(),
+        bus: 2,
+        address: "0x4a".into(),
+        required_driver: None,
+    }];
+
+    let results = evaluate_i2c_blueprint(&[bus2], &expectation);
+
+    assert_eq!(results.len(), 1);
+    // Should immediately flag as Missing without attempting to check fields
+    assert!(matches!(results[0].status, AuditStatus::Missing { .. }));
+}
