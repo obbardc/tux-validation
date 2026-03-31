@@ -353,7 +353,7 @@ fn create_mock_eth_device(
 }
 
 #[test]
-fn test_evaluate_network_blueprint_fails_on_speed_drop() {
+fn test_evaluate_network_blueprint_ethernet_fails_on_speed_drop() {
     // eth0 is physically plugged in, got an IP, but negotiated a bad 100Mbps link
     let eth0 = create_mock_eth_device(
         "eth0",
@@ -401,4 +401,133 @@ fn test_evaluate_network_blueprint_fails_on_speed_drop() {
         .find(|c| c.name == "MAC Address")
         .unwrap();
     assert!(mac_check.passed);
+}
+
+use tux_validation::device::WifiProperties;
+
+// Helper to spin up a fake Wi-Fi device
+fn create_mock_wifi_device(
+    name: &str,
+    mac: &str,
+    driver: Option<&str>,
+    link_up: bool,
+    ssid: Option<&str>,
+    signal: i32,
+    freq: u32,
+    ips: Vec<&str>,
+) -> TuxDevice {
+    TuxDevice {
+        name: name.to_string(),
+        address: DeviceAddress::Network {
+            interface: name.to_string(),
+            mac: mac.to_string(),
+        },
+        status: DeviceStatus {
+            in_udev: true,
+            hw_responding: Some(link_up), // Carrier / Associated
+            driver_bound: driver.map(|s| s.to_string()),
+        },
+        details: DeviceDetails::Wifi(WifiProperties {
+            ssid: ssid.map(|s| s.to_string()),
+            signal_level: signal,
+            frequency: freq,
+            link_detected: link_up,
+            ipv4_address: ips.iter().map(|s| s.to_string()).collect(),
+            ipv6_address: vec![],
+        }),
+        children: vec![],
+        attributes: HashMap::new(),
+    }
+}
+
+#[test]
+fn test_evaluate_network_blueprint_wifi_passes() {
+    // A healthy Intel Wi-Fi card connected to the corporate network
+    let wlan0 = create_mock_wifi_device(
+        "wlan0",
+        "11:22:33:44:55:66",
+        Some("iwlwifi"),
+        true,
+        Some("Corp_IoT_Net"),
+        -45,
+        5240,
+        vec!["10.0.0.15"],
+    );
+
+    let net_bus = TuxBus {
+        name: "Network".into(),
+        subsystem: Subsystem::Net,
+        id: "0".into(),
+        devices: vec![wlan0],
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    };
+
+    let expectation = vec![NetworkExpectation {
+        interface_name: "wlan0".into(),
+        link_status: true,
+        speed: None, // We don't assert speed on Wi-Fi
+        driver: Some("iwlwifi".into()),
+        mac_address: None,
+        expected_ip: None,                          // Any valid IPv4 is fine
+        expected_ssid: Some("Corp_IoT_Net".into()), // Must be on this exact network
+    }];
+
+    let results = evaluate_network_blueprint(&[net_bus], &expectation);
+
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].status, AuditStatus::Pass));
+
+    // Verify the SSID check specifically passed
+    let ssid_check = results[0].checks.iter().find(|c| c.name == "SSID").unwrap();
+    assert!(ssid_check.passed);
+    assert_eq!(ssid_check.actual, "Corp_IoT_Net");
+}
+
+#[test]
+fn test_evaluate_network_blueprint_wifi_fails_wrong_ssid() {
+    // The device successfully connected to Wi-Fi and got an IP,
+    // but it connected to the wrong network (e.g., a guest network instead of production)
+    let wlan0 = create_mock_wifi_device(
+        "wlan0",
+        "11:22:33:44:55:66",
+        Some("iwlwifi"),
+        true,
+        Some("Public_Guest_Wifi"),
+        -60,
+        2412,
+        vec!["192.168.1.100"],
+    );
+
+    let net_bus = TuxBus {
+        name: "Network".into(),
+        subsystem: Subsystem::Net,
+        id: "0".into(),
+        devices: vec![wlan0],
+        status: BusStatus::Active,
+        metadata: HashMap::new(),
+    };
+
+    let expectation = vec![NetworkExpectation {
+        interface_name: "wlan0".into(),
+        link_status: true,
+        speed: None,
+        driver: Some("iwlwifi".into()),
+        mac_address: None,
+        expected_ip: None,
+        expected_ssid: Some("Corp_IoT_Net".into()), // Blueprint demands the secure network
+    }];
+
+    let results = evaluate_network_blueprint(&[net_bus], &expectation);
+
+    assert_eq!(results.len(), 1);
+
+    // The overall audit must fail
+    assert!(matches!(results[0].status, AuditStatus::Fail { .. }));
+
+    // Ensure it failed specifically because of the SSID mismatch
+    let ssid_check = results[0].checks.iter().find(|c| c.name == "SSID").unwrap();
+    assert!(!ssid_check.passed);
+    assert_eq!(ssid_check.expected, "Corp_IoT_Net");
+    assert_eq!(ssid_check.actual, "Public_Guest_Wifi");
 }
