@@ -1,3 +1,11 @@
+//! Hardware device abstraction and discovery models.
+//!
+//! This module provides the unified representations of physical hardware
+//! across multiple Linux subsystems (USB, I2C, PCIe, Network). It handles
+//! parsing raw `udev` OS discovery data into normalized `TuxDevice` and
+//! `TuxBus` structures, extracting subsystem-specific properties, and
+//! determining bus-level health.
+
 use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 
@@ -9,6 +17,7 @@ pub struct DeviceStatus {
     pub driver_bound: Option<String>, // Some("rk808") or None
 }
 
+/// Represents the physical or logical address of a device across different subsystems.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", content = "props")]
 pub enum DeviceAddress {
@@ -62,6 +71,7 @@ impl DeviceAddress {
     }
 }
 
+/// Contains subsystem-specific hardware and software properties.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", content = "props")]
 pub enum DeviceDetails {
@@ -73,25 +83,36 @@ pub enum DeviceDetails {
     None,
 }
 
+/// Detailed properties extracted from a USB device.
 #[derive(Debug, Clone, Serialize)]
 pub struct UsbProperties {
+    /// Negotiated USB speed (e.g., "480", "5000").
     pub speed: String,
+    /// List of functional interfaces exposed by the USB device.
     pub interfaces: Vec<UsbInterface>,
+    /// The USB device number assigned by the host controller.
     pub dev_num: u8,
+    /// The USB serial number string, if available.
     pub serial_id: String,
 }
 
+/// Represents a single interface on a composite USB device.
 #[derive(Debug, Clone, Serialize)]
 pub struct UsbInterface {
+    /// The interface number.
     pub if_num: u32,
+    /// The USB interface class code (e.g., "09" for Hub, "e0" for Wireless).
     pub class: String,
+    /// The specific kernel driver bound to this interface.
     pub driver: Option<String>,
 }
 
 //TODO: need it?
+/// Detailed properties extracted from an I2C device.
 #[derive(Debug, Clone, Serialize)]
 pub struct I2cProperties;
 
+/// Detailed hardware and network layer properties for an Ethernet interface.
 #[derive(Debug, Clone, Serialize)]
 pub struct EthernetProperties {
     // --- Hardware Layer ---
@@ -107,6 +128,7 @@ pub struct EthernetProperties {
     pub firmware_version: Option<String>,
 }
 
+/// Detailed hardware and link properties for a PCIe device.
 #[derive(Debug, Clone, Serialize)]
 pub struct PcieProperties {
     pub vendor_id: String,   // e.g., "0x144d"
@@ -123,6 +145,7 @@ pub struct PcieProperties {
     pub cur_link_width: Option<u8>,     // e.g., 4
 }
 
+/// Detailed wireless and network layer properties for a Wi-Fi interface.
 #[derive(Debug, Clone, Serialize)]
 pub struct WifiProperties {
     pub ssid: Option<String>,
@@ -133,7 +156,7 @@ pub struct WifiProperties {
     pub ipv6_address: Vec<String>,
 }
 
-/// Device class
+/// The unified representation of a hardware device across any supported Linux subsystem.
 #[derive(Debug, Clone, Serialize)]
 pub struct TuxDevice {
     pub name: String,
@@ -144,31 +167,40 @@ pub struct TuxDevice {
     pub attributes: HashMap<String, String>, // Extra optional info
 }
 
+/// Represents the supported Linux hardware subsystems.
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Subsystem {
     I2c,
     Usb,
     Net,
     Pci,
-    Gpio,
 }
 
-///TODO: Does it make sense?
+/// Represents the overall health and discovery status of a primary system bus.
 #[derive(Debug, Serialize)]
 pub enum BusStatus {
+    /// The controller is present and functioning.
     Active,
+    /// The controller is present but disabled or suspended.
     Inactive,
+    /// The controller was expected but could not be found by the OS.
     Missing,
 }
 
-/// Hardware group (bus/controller/adaptor) class
+/// Represents a root hardware controller, adapter, or bus containing multiple child devices.
 pub struct TuxBus {
-    pub name: String,         // e.g., "i2c-7"
-    pub subsystem: Subsystem, // e.g: Subsystem::I2c
-    pub id: String,           // e.g. 7 as in i2c-7
+    /// The OS-assigned name of the bus (e.g., "i2c-7").
+    pub name: String,
+    /// The hardware subsystem this bus belongs to (e.g. `Subsystem::I2c`).
+    pub subsystem: Subsystem,
+    /// The numeric or string identifier of the bus (e.g., "7").
+    pub id: String,
+    /// The list of devices physically or logically attached to this bus.
     pub devices: Vec<TuxDevice>,
-    pub status: BusStatus,                 // Is the controller itself healthy?
-    pub metadata: HashMap<String, String>, // For various metadata
+    /// The health status of the controller itself.
+    pub status: BusStatus,
+    /// Additional subsystem-specific metadata (e.g., controller features).
+    pub metadata: HashMap<String, String>,
 }
 
 impl TuxDevice {
