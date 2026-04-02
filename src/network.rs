@@ -1,3 +1,10 @@
+//! Network subsystem discovery and auditing.
+//!
+//! This module is responsible for enumerating both wired (Ethernet) and wireless (Wi-Fi)
+//! network interfaces. It combines `udev` sysfs data with `nix` (for IP address extraction)
+//! and Netlink (for real-time Wi-Fi metadata like SSID and signal strength) to build
+//! a complete picture of the device's network state.
+
 use crate::device::{
     BusStatus, DeviceDetails, EthernetProperties, Subsystem, TuxBus, TuxDevice, WifiProperties,
 };
@@ -8,6 +15,16 @@ use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use udev::Enumerator;
 
+/// Scans the system for network interfaces and extracts their hardware and link properties.
+///
+/// This function performs a comprehensive audit by:
+/// 1. Enumerating all network devices via `udev` (ignoring the `lo` loopback interface).
+/// 2. Querying the OS for assigned IPv4 and IPv6 addresses (filtering out link-local/APIPA addresses).
+/// 3. Communicating with the kernel via Netlink to fetch active Wi-Fi connection details.
+///
+/// # Returns
+/// A `Result` containing a single `TuxBus` (representing the unified "Network Subsystem")
+/// populated with all discovered `TuxDevice` network interfaces.
 pub fn audit_network_subsystem() -> Result<Vec<TuxBus>> {
     let mut enumerator = Enumerator::new()?;
     enumerator.match_subsystem("net")?;
