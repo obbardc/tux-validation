@@ -1,8 +1,30 @@
+//! PCI and PCI Express (PCIe) subsystem discovery and auditing.
+//!
+//! This module enumerates devices on the PCI bus using `udev`. It extracts
+//! detailed hardware properties including vendor/device IDs, human-readable
+//! hardware database names, and physical PCIe link characteristics (such as
+//! negotiated link speed and active lane width).
+
 use crate::device::{BusStatus, DeviceDetails, PcieProperties, Subsystem, TuxBus, TuxDevice};
 use anyhow::Result;
 use std::collections::HashMap;
 use udev::Enumerator;
 
+/// Scans the system for PCI/PCIe devices and extracts their hardware properties.
+///
+/// This function queries `udev` for the `pci` subsystem. For each discovered device,
+/// it parses basic identifiers (Vendor ID, Device ID, Class) as well as advanced
+/// physical link attributes like maximum and current negotiated link speeds
+/// (e.g., PCIe Gen 3.0) and lane widths (e.g., x4, x16).
+///
+/// If the host system does not have a PCI subsystem (which is common on smaller
+/// embedded ARM boards), this function gracefully catches the `udev` mismatch
+/// and returns an empty list rather than throwing an error.
+///
+/// # Returns
+/// A `Result` containing a single logical `TuxBus` (representing the unified
+/// "PCI Express Bus") populated with all discovered `TuxDevice` endpoints.
+/// If no PCI subsystem or devices are found, it returns an empty `Vec`.
 pub fn audit_pci_subsystem() -> Result<Vec<TuxBus>> {
     let mut enumerator = Enumerator::new()?;
 
