@@ -1,150 +1,57 @@
 # tux-validation
 
-System validation framework for Embedded Linux.
+A practical, blueprint-driven system validation framework for Embedded Linux.
+
+`tux-validation` allows hardware engineers and embedded developers to define the expected state of their system in a TOML file and automatically verify it. It is designed to be run during and/or after board bring-up, QA validation, or continuous integration (CI) pipelines.
+
+*Note: This project is under active development. Subsystems and API surfaces may evolve.*
+
+## Currently Supported Subsystems
+
+The framework currently supports auditing the following components:
+
+* **USB:** Verify vendor/product IDs, port topologies, expected drivers, and link speeds.
+* **I2C:** Verify bus topologies, device addresses, driver bindings, and live hardware ACK/NACK status.
+* **PCIe:** Verify BDF addresses, link widths (e.g., x4 vs x16), negotiated link speeds, and bound drivers.
+* **Networking:** Validate Ethernet/Wi-Fi interfaces, MAC addresses, link states, negotiated speeds, and SSID associations.
+* **Systemd:** Query D-Bus to ensure critical user-space daemons are loaded, active, and running.
 
 ## Dependencies
 
-Due to relying on `udev-rs`, requires the following packages installed:
-```
+The framework interacts directly with the Linux kernel via `libudev` and `zbus`. If building natively on a Linux host or devboard, install the required development headers:
+
+```bash
+sudo apt-get update
 sudo apt-get install libudev-dev pkg-config
 ```
 
-## Usage
+> **For Embedded Targets**: Linking complex D-Bus macros can cause out-of-memory (OOM) errors on constrained boards. Cross-compiling from a host machine is recommended, e.g.:
+> ```bash
+> cross build --release --target aarch64-unknown-linux-gnu
+> ```
 
-### Build examples
-Run
-```
-cargo build --examples
-```
+> **Note on I2C Hardware Probing:** If you are using the live hardware probe feature to verify physical I2C ACK/NACK status, your kernel must expose the user-space I2C character devices (`/dev/i2c-*`). You may need to load the module manually before running the tool:
+> ```bash
+> sudo modprobe i2c-dev
+> ```
 
-### Run examples
+## Usage: Command-Line Tool
+The primary way to use tux-validation is via the unified executable.
 
-<details>
-<summary><b>udev_audit</b></summary>
-This will be fancy-colored in a terminal:
-
-<pre>
-$ ./target/debug/examples/udev_audit
-
-===== UDEV-AUDIT =====
-
-=== I2C SUBSYSTEM ===
-
-I2C Bus (Bus 0)
-  • rk808 [0x1b]
-    ┗━ Driver: rk8xx-i2c
-  • fan53555 [0x60]
-    ┗━ Driver: fan53555-regulator
-
-I2C Bus (Bus 4)
-  • sgtl5000 [0x0a]
-    ┗━ Driver: sgtl5000
-
-I2C Bus (Bus 7)
-  • amc6821 [0x18]
-    ┗━ Driver: amc6821
-  • isl1208 [0x6f]
-    ┗━ Driver: none
-
-I2C Bus (Bus 8)
-  • fan53555 [0x60]
-    ┗━ Driver: fan53555-regulator
-
-=== USB SUBSYSTEM ===
-
-Bus Controller (Bus 1)
-• EHCI Host Controller [1d6b:0002] at usb1 (480M)
-  ┗━ If 00 [Hub]: Driver hub
-
-Bus Controller (Bus 2)
-• Generic Platform OHCI controller [1d6b:0001] at usb2 (12M)
-  ┗━ If 00 [Hub]: Driver hub
-
-Bus Controller (Bus 3)
-• xHCI Host Controller [1d6b:0002] at usb3 (480M)
-  ┗━ If 00 [Hub]: Driver hub
-  • USB2.0 Hub [05e3:0610] at 3-1 (480M)
-    ┗━ If 00 [Hub]: Driver hub
-    • Mule USB/CAN Adapter [2294:425a] at 3-1.4 (12M)
-      ┗━ If 00 [Vendor-Specific]: Driver none
-
-Bus Controller (Bus 4)
-• xHCI Host Controller [1d6b:0003] at usb4 (5000M)
-  ┗━ If 00 [Hub]: Driver hub
-  • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
-    ┗━ If 00 [Hub]: Driver hub
-</pre>
-<pre>
-$ sudo ./target/debug/examples/udev_audit --hw-probe ./examples/puma-rk3399.toml 
-
-===== UDEV-AUDIT =====
-
-=== I2C SUBSYSTEM ===
-
-I2C Bus (Bus 0)
-  ★ rk808 [0x1b]
-    ┗━ Driver rk8xx-i2c - expected (HW: ACK)
-  • fan53555 [0x60]
-    ┗━ Driver: fan53555-regulator (HW: ACK)
-
-I2C Bus (Bus 4)
-  ★ sgtl5000 [0x0a]
-    ┗━ Driver sgtl5000 - expected (HW: ACK)
-
-I2C Bus (Bus 7)
-  • amc6821 [0x18]
-    ┗━ Driver: amc6821 (HW: ACK)
-  • isl1208 [0x6f]
-    ┗━ Driver: none (HW: ACK)
-  ★ Unknown [0x50]
-    ┗━ Driver none - expected fan53555-regulator (HW: ACK)
-
-I2C Bus (Bus 8)
-  • fan53555 [0x60]
-    ┗━ Driver: fan53555-regulator (HW: ACK)
-
-=== USB SUBSYSTEM ===
-
-Bus Controller (Bus 1)
-• EHCI Host Controller [1d6b:0002] at usb1 (480M)
-  ┗━ If 00 [Hub]: Driver hub
-
-Bus Controller (Bus 2)
-• Generic Platform OHCI controller [1d6b:0001] at usb2 (12M)
-  ┗━ If 00 [Hub]: Driver hub
-
-Bus Controller (Bus 3)
-• xHCI Host Controller [1d6b:0002] at usb3 (480M)
-  ┗━ If 00 [Hub]: Driver hub
-  ★ USB2.0 Hub [05e3:0610] at 3-1 (480M - expected)
-    ┗━ If 00 [Hub]: Driver hub - expected
-    ★ Mule USB/CAN Adapter [2294:425a] at 3-1.4 (12M - expected)
-      ┗━ If 00 [Vendor-Specific]: Driver none - expected ucan
-
-Bus Controller (Bus 4)
-• xHCI Host Controller [1d6b:0003] at usb4 (5000M)
-  ┗━ If 00 [Hub]: Driver hub
-  • USB3.0 Hub [05e3:0620] at 4-1 (5000M)
-    ┗━ If 00 [Hub]: Driver hub
-</pre>
-
-where `puma-rk3399.toml` contains
-```
-[[usb_devices]]
-name = "Mule CAN Adapter"
-vid = "2294"
-pid = "425a"
-expected_port = "3-1.4"
-required_driver = "ucan"
-min_speed = "12M"
+### 1. Create a Blueprint
+Define your expected hardware topology and software state in a TOML file (e.g., `board_config.toml`):
+```toml
+[[systemd_services]]
+name = "sshd.service"
+active_state = "active"
+sub_state = "running"
 
 [[usb_devices]]
-name = "Onboard Hub"
-vid = "05e3"
-pid = "0610"
-expected_port = "3-1"
-required_driver = "hub"
-min_speed = "480M"
+name = "External Camera"
+vid = "046d"
+pid = "082d"
+required_driver = "uvcvideo"
+min_speed = "480"
 
 [[i2c_devices]]
 name = "rk808 PMIC"
@@ -152,21 +59,41 @@ bus = 0
 address = "0x1b"
 required_driver = "rk8xx-i2c"
 
-[[i2c_devices]]
-name = "sgtl5000 Audio Codec"
-bus = 4
-address = "0x0a"
-required_driver = "sgtl5000"
+[[network_interfaces]]
+interface_name = "wlan0"
+link_status = true
+expected_ssid = "Corporate_IoT_Net"
+```
 
-[[i2c_devices]]
-name = "Some"
-bus = 7
-address = "0x50"
-required_driver = "fan53555-regulator"
+### 2. Run the Validator
+Run the audit against your blueprint. To generate a JUnit XML report for CI systems (like Jenkins or GitHub Actions), use the `-x` flag.
+```bash
+tux-validation --config board_config.toml -x report.xml --xml-summary
 ```
-</details>
+If you are interacting directly with hardware (for example, using the `--i2c-hw-probe` flag to perform an `smbus_write_quick`), root privileges are required to access the local device nodes. Also, remember to load the `i2c-dev` module as noted above:
+```bash
+sudo tux-validation --config board_config.toml --i2c-hw-probe
+```
 
-### Runt unit tests
+## Usage: As a Rust Library
+
+Because `tux-validation` exposes its core evaluation engine, you can use it as a framework to build your own custom testing tools. 
+
+Since the project is currently in active development, it is not yet published to crates.io. You can add it to your `Cargo.toml` by pointing directly to this repository:
+
+```toml
+[dependencies]
+# Pull directly from the repository
+tux-validation = { git = "https://github.com/obbardc/tux-validation.git", branch = "main" }
 ```
-$ cargo test
+*(Note: If you are working locally or in a monorepo, you can also use a relative path: `tux-validation = { path = "../tux-validation" }`)*
+
+You can view the `examples/` directory in this repository for reference implementations on how to query specific subsystems (like `udev` or `systemd`) directly from Rust code.
+
+## Testing
+The framework includes a functional test suite to verify the core pass/fail logic and OS-level extractors.
+```bash
+cargo test
 ```
+*(Note: Hardware extraction integration tests will safely skip if run in an empty cloud CI environment).*
+
