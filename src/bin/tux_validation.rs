@@ -87,35 +87,35 @@ fn main() -> anyhow::Result<()> {
         !service_names.is_empty(),
         || audit_systemd_services(&service_names),
         |services| evaluate_systemd_blueprint(services, &config.systemd_services),
-        |services, res| print_annotated_systemd(services, res),
+        print_annotated_systemd,
     )?;
 
     let (i2c_results, i2c_dur) = run_audit_phase(
         !config.i2c_devices.is_empty(),
         || audit_all_i2c_buses(args.i2c_hw_probe),
         |buses| evaluate_i2c_blueprint(buses, &config.i2c_devices),
-        |buses, res| print_annotated_i2c(buses, res),
+        print_annotated_i2c,
     )?;
 
     let (usb_results, usb_dur) = run_audit_phase(
         !config.usb_devices.is_empty(),
-        || audit_usb_subsystem(),
+        audit_usb_subsystem,
         |buses| evaluate_usb_blueprint(buses, &config.usb_devices),
         |buses, res| print_annotated_usb_tree(buses, res, args.usb_print_serial),
     )?;
 
     let (net_results, net_dur) = run_audit_phase(
         !config.network_devices.is_empty(),
-        || audit_network_subsystem(),
+        audit_network_subsystem,
         |buses| evaluate_network_blueprint(buses, &config.network_devices),
-        |buses, res| print_annotated_network(buses, res),
+        print_annotated_network,
     )?;
 
     let (pci_results, pci_dur) = run_audit_phase(
         !config.pci_devices.is_empty(),
-        || audit_pci_subsystem(),
+        audit_pci_subsystem,
         |buses| evaluate_pci_blueprint(buses, &config.pci_devices),
-        |buses, res| print_annotated_pci(buses, res),
+        print_annotated_pci,
     )?;
 
     // =========================================================================
