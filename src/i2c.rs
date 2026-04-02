@@ -1,3 +1,14 @@
+//! I2C subsystem discovery and hardware probing.
+//!
+//! This module enumerates I2C buses and devices. The primary entry point for
+//! modern `TuxDevice` generation is `audit_all_i2c_buses`, which combines `udev`
+//! enumeration with optional live hardware probing (SMBus Write Quick).
+//!
+//! **Note on Legacy Functions:** This module contains several older functions
+//! (e.g., `discover_buses`, `validate_bus`, `full_system_scan`) that rely on direct
+//! `sysfs` and `/dev` string parsing. These are retained for ad-hoc debugging but
+//! are bypassed by the modern TOML blueprint validation pipeline.
+
 use crate::device::{
     BusStatus, DeviceAddress, DeviceDetails, DeviceStatus, I2cProperties, Subsystem, TuxBus,
     TuxDevice,
@@ -41,7 +52,10 @@ pub trait I2cScanner {
     fn scan_sysfs(&self) -> Result<Vec<u16>>; // TODO: add address range as parameter
 }
 
-/// A specific I2C bus scanner.
+/// A hardware-level I2C bus scanner.
+///
+/// Used by the main audit pipeline to execute low-level SMBus commands directly
+/// against `/dev/i2c-X` character devices to determine physical chip presence.
 pub struct LinuxI2cScanner {
     pub bus_id: u8,
 }
@@ -50,7 +64,7 @@ impl I2cScanner for LinuxI2cScanner {
     /// Scans a given I2C bus ID via hardware probe (smbus_write_quick).
     ///
     /// Might potentially be disruptive for the bus.
-    /// TODO: add some kind of safety check?
+    // TODO: add some kind of safety check?
     fn scan_hw_probe(&self) -> Result<(Vec<u16>, Vec<u16>)> {
         let mut unbound = Vec::new();
         let mut bound = Vec::new();
@@ -112,8 +126,6 @@ pub struct I2cValidationResult {
 }
 
 /// Scan an I2C bus and check for specific device addresses.
-///
-/// TODO: Uses scan_sysfs - can now upgrade to use udev
 pub fn validate_bus(
     scanner: &impl I2cScanner,
     expected_addresses: &[u16],
@@ -265,7 +277,15 @@ pub fn scan_i2c_subsystem_with_udev() -> Result<()> {
     Ok(())
 }
 
-/// Sweeps through udev records for I2C clients and returns a {bus: device} map.
+/// Sweeps through `udev` records to map discovered I2C clients to their parent buses.
+///
+/// This is a foundational helper for the modern I2C scanner. It filters the OS's `udev`
+/// database for devices belonging to the `i2c` subsystem, identifies root controllers,
+/// and groups child devices under their respective bus IDs.
+///
+/// # Returns
+/// A `HashMap` where the key is the integer bus ID (e.g., `7` for `i2c-7`) and the value
+/// is a vector of `udev::Device` objects representing the endpoints on that bus.
 pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     let mut map = HashMap::new();
     let mut enumerator = Enumerator::new()?;
@@ -293,10 +313,20 @@ pub fn get_i2c_udev_map() -> Result<HashMap<u8, Vec<udev::Device>>> {
     Ok(map)
 }
 
-/// Performs full audit (scan) of the I2C subsystem via udev and return found device info.
+/// Performs a comprehensive audit of the I2C subsystem and returns structured `TuxBus` data.
 ///
-/// Optionally performs hardware probe (via SMBus Write Quick) - this probes the full range
-///  of possible addresses (so can find "ghost" devices not in udev).
+/// This is the primary I2C scanning function for the `tux-validation` pipeline. It relies on
+/// `udev` for the baseline inventory and can optionally perform live hardware probing to verify
+/// physical chip presence and detect "ghost" devices (chips that ACK on the bus but are not
+/// registered in the kernel device tree).
+///
+/// # Arguments
+/// * `enable_hw_probe` - If `true`, the scanner will issue an SMBus Write Quick command to every
+///   valid address (0x08 - 0x77) on every bus. **Warning:** This requires `sudo` and the `i2c-dev`
+///   kernel module to be loaded. Probing can occasionally disrupt misbehaving I2C devices.
+///
+/// # Returns
+/// A sorted list of `TuxBus` objects, populated with fully constructed `TuxDevice` endpoints.
 pub fn audit_all_i2c_buses(enable_hw_probe: bool) -> anyhow::Result<Vec<TuxBus>> {
     let udev_map = get_i2c_udev_map()?;
     let mut board_report = Vec::new();
