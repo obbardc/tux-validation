@@ -1,3 +1,12 @@
+//! Output generation and formatting.
+//!
+//! This module handles rendering the results of a system audit. It provides
+//! two main output streams:
+//! 1. **JUnit XML Generation:** For continuous integration (CI) systems to automatically
+//!    parse pass/fail metrics.
+//! 2. **Console UI:** Highly annotated, colorized terminal output for human engineers,
+//!    cross-referencing discovered hardware with expected blueprint rules.
+
 use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice, UsbInterface};
 use crate::systemd::SystemdService;
 use crate::validation::{AuditStatus, TargetId, ValidationResult};
@@ -7,7 +16,18 @@ use roxmltree::Document;
 use std::fs;
 use std::time::Duration as CoreDuration;
 
-/// Generates a junit report object and writes it in XML format.
+/// Generates a CI-compatible JUnit XML report from the validation results.
+///
+/// This creates an XML file containing a single `<testsuite>`. If a `scan_duration`
+/// is provided, it injects an overarching "Scan Phase" test case to track discovery time.
+/// Hardware and Service errors are automatically categorized by type.
+///
+/// # Arguments
+/// * `results` - The list of evaluated `ValidationResult` objects.
+/// * `filepath` - The destination path for the `.xml` file.
+/// * `scan_duration` - Optional time taken to perform the OS-level discovery scan.
+/// * `suite_name` - The name to assign to the overarching `<testsuite>`.
+/// * `scan_name` - The name to assign to the initial discovery test case.
 pub fn generate_junit_xml(
     results: &[ValidationResult],
     filepath: &str,
@@ -92,7 +112,16 @@ fn property_colored_bold(
     property_colored_custom(property, result, check_name, |s| s.bold())
 }
 
-///Prints annotated USB tree with detected devices and interfaces
+/// Prints a color-annotated hierarchical tree of the USB subsystem.
+///
+/// Cross-references discovered `TuxBus` data with `ValidationResult`s.
+/// Passing properties are highlighted in green, failing ones in red,
+/// and untested properties remain blue/dimmed.
+///
+/// # Arguments
+/// * `buses` - The raw USB hardware buses discovered by the system.
+/// * `results` - The evaluated expectations from the blueprint.
+/// * `print_serial` - If `true`, includes the internal USB serial numbers in the output.
 pub fn print_annotated_usb_tree(
     buses: &[TuxBus],
     results: &[ValidationResult],
@@ -186,6 +215,14 @@ fn print_usb_interface(iface: &UsbInterface, indent: &str, result: Option<&Valid
     );
 }
 
+/// Prints a color-annotated list of I2C buses and attached devices.
+///
+/// Empty buses are automatically skipped. Hardware ACK/NACK responses (if a live
+/// hardware probe was performed) are displayed alongside the expected driver bindings.
+///
+/// # Arguments
+/// * `buses` - The raw I2C hardware buses discovered by the system.
+/// * `results` - The evaluated expectations from the blueprint.
 pub fn print_annotated_i2c(buses: &[TuxBus], results: &[ValidationResult]) {
     println!("\n{}", "=== I2C SUBSYSTEM ===".bold().cyan());
     for bus in buses {
@@ -236,6 +273,15 @@ fn print_i2c_device(dev: &TuxDevice, results: &[ValidationResult]) {
     }
 }
 
+/// Prints a color-annotated report of active Network interfaces.
+///
+/// Handles both Ethernet (speed, duplex) and Wi-Fi (SSID, signal strength, frequency)
+/// devices. Skips the internal `lo` (loopback) interface. Signal strengths are dynamically
+/// color-coded (Green > -50dBm, Yellow > -70dBm, Red otherwise).
+///
+/// # Arguments
+/// * `buses` - The raw network hardware buses discovered by the system.
+/// * `results` - The evaluated expectations from the blueprint.
 pub fn print_annotated_network(buses: &[TuxBus], results: &[ValidationResult]) {
     println!("\n{}", "=== NETWORK SUBSYSTEM ===".bold().cyan());
 
@@ -373,7 +419,16 @@ fn print_network_interface_details(
     }
 }
 
-// Prints annotated PCI devices report
+/// Prints a color-annotated report of PCIe devices and their link capabilities.
+///
+/// Devices are sorted by their BDF (Bus:Device:Function) address. Identifies and
+/// warns (in yellow) if a device is electrically bottlenecked (i.e., operating at
+/// a lower lane width than physically capable), unless overridden by a strict
+/// test failure in the blueprint.
+///
+/// # Arguments
+/// * `buses` - The raw PCIe hardware buses discovered by the system.
+/// * `results` - The evaluated expectations from the blueprint.
 pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
     println!("\n{}", "=== PCIe SUBSYSTEM ===".bold().cyan());
 
@@ -492,6 +547,14 @@ pub fn print_annotated_pci(buses: &[TuxBus], results: &[ValidationResult]) {
     }
 }
 
+/// Prints a color-annotated report of queried Systemd services.
+///
+/// Displays the requested LoadState, ActiveState, and SubState. If a requested
+/// service is entirely missing from the systemd daemon, it is clearly marked in red.
+///
+/// # Arguments
+/// * `services` - The list of systemd services and their current states queried via D-Bus.
+/// * `results` - The evaluated pass/fail expectations from the validation blueprint.
 pub fn print_annotated_systemd(services: &[SystemdService], results: &[ValidationResult]) {
     if services.is_empty() {
         return;
@@ -545,7 +608,13 @@ pub fn print_annotated_systemd(services: &[SystemdService], results: &[Validatio
     }
 }
 
-/// Reads a JUnit XML file and prints a high-level summary to the terminal.
+/// Reads a generated JUnit XML file and prints a condensed pass/fail summary to the console.
+///
+/// This serves as a secondary verification that the XML file was correctly formatted,
+/// using a DOM parser (`roxmltree`) to explicitly count the `<testcase>` and `<failure>` nodes.
+///
+/// # Arguments
+/// * `filepath` - The file path to the generated JUnit `.xml` report.
 pub fn print_xml_summary(filepath: &str) -> anyhow::Result<()> {
     // Read the file into a string
     let xml_str = fs::read_to_string(filepath)
