@@ -97,3 +97,15 @@ cargo test
 ```
 *(Note: Hardware extraction integration tests will safely skip if run in an empty cloud CI environment).*
 
+## Documentation
+
+Since this framework is currently used as an internal library and not published to `crates.io`, you can generate and view the API documentation locally. 
+
+Run the following command in the root of the repository:
+
+```bash
+cargo doc --no-deps --open
+```
+
+This will parse all source code docstrings, generate a searchable HTML API reference, and automatically open it in your default web browser.
+
