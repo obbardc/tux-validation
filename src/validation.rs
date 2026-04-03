@@ -1,3 +1,12 @@
+//! The core evaluation and validation engine.
+//!
+//! This module acts as the central rule engine for `tux-validation`. It takes the
+//! raw hardware/software data scanned from the OS (`TuxBus`, `SystemdService`) and compares
+//! it against the user-defined constraints from the TOML configuration (`Config`).
+//!
+//! It generates detailed, granular `ValidationResult` objects that feed directly
+//! into the XML and console reporting modules.
+
 use crate::config::{
     I2cExpectation, NetworkExpectation, PciExpectation, SystemdExpectation, UsbExpectation,
 };
@@ -5,7 +14,8 @@ use crate::device::{DeviceAddress, DeviceDetails, Subsystem, TuxBus, TuxDevice};
 use crate::systemd::SystemdService;
 use std::time::{Duration as CoreDuration, Instant};
 
-/// A generic way to identify what hardware a particular test was looking for
+/// A subsystem-agnostic identifier used to map a specific blueprint expectation
+/// to the actual hardware or software instance discovered on the system.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TargetId {
     Usb { vid: String, pid: String },
@@ -15,20 +25,21 @@ pub enum TargetId {
     Systemd { service: String },
 }
 
-/// The outcome of a single expectation check
+/// The definitive outcome of an evaluated blueprint expectation.
 #[derive(Debug, Clone)]
 pub enum AuditStatus {
+    /// All defined constraints for this expectation were met.
     Pass,
+    /// The target was found, but one or more constraints (e.g., driver, speed) did not match.
     Fail {
         reason: String,
         actual_value: String,
     },
-    Missing {
-        reason: String,
-    }, // Hardware wasn't found at all
+    /// The expected target could not be found on the system at all.
+    Missing { reason: String },
 }
 
-/// Information about each tested field
+/// A granular record of a single evaluated constraint (e.g., "Speed", "Driver", "MAC Address").
 #[derive(Debug, Clone)]
 pub struct FieldCheck {
     pub name: String,
@@ -37,7 +48,8 @@ pub struct FieldCheck {
     pub actual: String,
 }
 
-/// The complete record of a test case
+/// The complete validation record for a single blueprint expectation, encompassing
+/// target discovery, individual field checks, overall status, and execution duration.
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
     pub subsystem: String, // e.g., "USB" or "I2C"
@@ -49,7 +61,15 @@ pub struct ValidationResult {
     pub duration: CoreDuration,
 }
 
-/// Evaluates provided USB configuration against detected hardware
+/// Evaluates the discovered USB topology against the expected USB blueprint.
+///
+/// This function iterates through each `UsbExpectation`, recursively searches the
+/// `TuxBus` trees for a matching VID:PID, and validates physical port topologies,
+/// negotiated bus speeds, and active kernel drivers.
+///
+/// # Arguments
+/// * `buses` - The raw USB hardware buses discovered by `udev`.
+/// * `blueprint` - The list of expected USB devices from the TOML configuration.
 pub fn evaluate_usb_blueprint(
     buses: &[TuxBus],
     blueprint: &[UsbExpectation],
@@ -90,7 +110,7 @@ pub fn evaluate_usb_blueprint(
     results
 }
 
-/// Searches all buses for a specific USB device
+/// Searches all buses recursively for a specific USB device using its Vendor and Product IDs.
 pub fn find_usb_device<'a>(buses: &'a [TuxBus], vid: &str, pid: &str) -> Option<&'a TuxDevice> {
     for bus in buses {
         for dev in &bus.devices {
@@ -102,7 +122,7 @@ pub fn find_usb_device<'a>(buses: &'a [TuxBus], vid: &str, pid: &str) -> Option<
     None
 }
 
-/// Recursive device searcher
+/// Recursive USB device searcher
 fn search_tree<'a>(dev: &'a TuxDevice, vid: &str, pid: &str) -> Option<&'a TuxDevice> {
     if let DeviceAddress::Usb {
         vid: dev_vid,
@@ -125,8 +145,9 @@ fn search_tree<'a>(dev: &'a TuxDevice, vid: &str, pid: &str) -> Option<&'a TuxDe
     None
 }
 
-/// Verifies whether (and to what extent) detected device corresponds to requested configuration
-/// Returns AuditStatus and vector of FieldCheck objects.
+/// Executes granular constraints checks (Port, Speed, Driver) for a discovered USB device.
+///
+/// Returns the aggregate `AuditStatus` and a vector of individual `FieldCheck` records.
 pub fn verify_usb_constraints(
     dev: &TuxDevice,
     exp: &UsbExpectation,
@@ -245,7 +266,8 @@ pub fn verify_usb_constraints(
     (status, checks)
 }
 
-/// Checks if expected USB speed is equal or larger than the actual one.
+/// Helper to verify if the actual negotiated USB speed meets or exceeds the expected minimum.
+/// Gracefully handles and strips trailing string characters (e.g., "480M", "5000 Mbps").
 pub fn verify_speed(actual: &str, expected_min: &str) -> bool {
     let speed_to_val = |s: &str| -> u32 {
         // Strip everything that isn't a digit (like "M" or "Mbps")
@@ -258,7 +280,15 @@ pub fn verify_speed(actual: &str, expected_min: &str) -> bool {
     speed_to_val(actual) >= speed_to_val(expected_min)
 }
 
-/// Evaluates provided I2C configuration against detected hardware
+/// Evaluates the discovered I2C buses and devices against the expected I2C blueprint.
+///
+/// Attempts to locate the expected I2C chip on the specific bus and address, then
+/// validates whether the kernel driver is correctly bound and whether the physical
+/// chip acknowledged a hardware probe (if enabled during the scan phase).
+///
+/// # Arguments
+/// * `buses` - The scanned I2C buses and devices.
+/// * `blueprint` - The list of expected I2C devices from the TOML configuration.
 pub fn evaluate_i2c_blueprint(
     buses: &[TuxBus],
     blueprint: &[I2cExpectation],
@@ -311,9 +341,9 @@ pub fn evaluate_i2c_blueprint(
     results
 }
 
-/// Verifies whether (and to what extent) detected I2C device corresponds to requested configuration
-/// Returns AuditStatus and vector of FieldCheck objects.
-/// TODO: There is some boilerplate here and in verify_usb_constraints - need to refactor
+/// Executes granular constraints checks (Hardware Probe ACK, Driver) for a discovered I2C device.
+///
+/// Returns the aggregate `AuditStatus` and a vector of individual `FieldCheck` records.
 pub fn verify_i2c_constraints(
     dev: &TuxDevice,
     exp: &I2cExpectation,
@@ -366,6 +396,14 @@ pub fn verify_i2c_constraints(
     (status, checks)
 }
 
+/// Evaluates the discovered network interfaces against the expected network blueprint.
+///
+/// Verifies hardware-level attributes (MAC Address, Link Status, Carrier Speed) as
+/// well as software-level attributes (DHCP/IPv4 assignments, bound drivers, and Wi-Fi SSIDs).
+///
+/// # Arguments
+/// * `buses` - The scanned network interfaces.
+/// * `blueprint` - The list of expected network interfaces from the TOML configuration.
 pub fn evaluate_network_blueprint(
     buses: &[TuxBus],
     blueprint: &[NetworkExpectation],
@@ -407,6 +445,9 @@ pub fn evaluate_network_blueprint(
     results
 }
 
+/// Executes granular constraints checks (e.g. MAC address, link status, speed) for a discovered network interface.
+///
+/// Returns the aggregate `AuditStatus` and a vector of individual `FieldCheck` records.
 fn verify_network_constraints(
     dev: &TuxDevice,
     exp: &NetworkExpectation,
@@ -536,9 +577,15 @@ fn verify_network_constraints(
     (status, checks)
 }
 
-// Evaluates found PCI devices against expected blueprint.
-// Structured slightly different from previous validators for a change.
-// TODO: should probably make evaluation functions more uniform and look into reducing boilerplate
+/// Evaluates the discovered PCIe devices against the expected PCIe blueprint.
+///
+/// Flattens the PCI bus topology and searches for devices by their Bus-Device-Function (BDF)
+/// address. Once found, it validates the hardware model, bound driver, and physical link
+/// characteristics (minimum lane width and link speed).
+///
+/// # Arguments
+/// * `buses` - The scanned PCI subsystem buses.
+/// * `blueprint` - The list of expected PCIe constraints from the TOML configuration.
 pub fn evaluate_pci_blueprint(
     buses: &[TuxBus],
     blueprint: &[PciExpectation],
@@ -699,6 +746,15 @@ pub fn evaluate_pci_blueprint(
     results
 }
 
+/// Evaluates queried Systemd D-Bus services against the expected software blueprint.
+///
+/// Matches services by their exact unit name (e.g., "sshd.service") and verifies
+/// that their internal state machine values (LoadState, ActiveState, SubState)
+/// match the required blueprint parameters.
+///
+/// # Arguments
+/// * `scanned_services` - The active services previously queried from the D-Bus interface.
+/// * `blueprint` - The expected daemon states from the TOML configuration.
 pub fn evaluate_systemd_blueprint(
     scanned_services: &[SystemdService],
     blueprint: &[SystemdExpectation],
