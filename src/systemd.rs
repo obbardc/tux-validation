@@ -1,12 +1,26 @@
+//! Systemd user-space daemon validation via D-Bus.
+//!
+//! This module communicates directly with the Linux system D-Bus to query the
+//! `org.freedesktop.systemd1` interface. It provides a synchronous mechanism to
+//! fetch the real-time lifecycle states (Load, Active, Sub) of requested systemd
+//! units without needing to parse the output of CLI commands like `systemctl`.
+
 use zbus::{blocking::Connection, proxy};
 
+/// A real-time snapshot of a systemd unit's state scraped from D-Bus.
 #[derive(Debug, Clone)]
 pub struct SystemdService {
+    /// The exact name of the unit (e.g., "NetworkManager.service").
     pub name: String,
+    /// `true` if systemd has a record of this unit, `false` if it returned `NoSuchUnit`.
     pub exists: bool,
+    /// The human-readable description of the unit (purely for logging/UI).
     pub description: Option<String>,
+    /// The unit's configuration load state (e.g., "loaded", "not-found", "masked").
     pub load_state: Option<String>,
+    /// The unit's high-level state (e.g., "active", "inactive", "failed").
     pub active_state: Option<String>,
+    /// The unit's low-level, type-specific state (e.g., "running", "exited", "dead").
     pub sub_state: Option<String>,
 }
 
@@ -37,7 +51,20 @@ trait SystemdUnit {
     fn sub_state(&self) -> zbus::Result<String>;
 }
 
-/// Synchronously connects to D-Bus and scrapes the current state of requested services.
+/// Synchronously connects to the system D-Bus and scrapes the current state of requested services.
+///
+/// This function queries the `Systemd1.Manager` interface to find the object path of each
+/// requested unit. If the unit exists, it queries the `Systemd1.Unit` interface to extract
+/// its exact lifecycle state. It gracefully intercepts `NoSuchUnit` D-Bus errors, marking
+/// those specific services as `exists = false` rather than failing the entire audit.
+///
+/// # Arguments
+/// * `service_names` - A slice of systemd unit names (including suffixes, e.g., "sshd.service")
+///   to query.
+///
+/// # Returns
+/// A `Result` containing a list of `SystemdService` snapshots reflecting the real-time state
+/// of the daemon.
 pub fn audit_systemd_services(service_names: &[String]) -> anyhow::Result<Vec<SystemdService>> {
     let connection = Connection::system()?;
     let manager = SystemdManagerProxyBlocking::new(&connection)?;
