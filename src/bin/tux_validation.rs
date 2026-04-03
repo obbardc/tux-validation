@@ -16,8 +16,21 @@ use tux_validation::validation::{
     evaluate_systemd_blueprint, evaluate_usb_blueprint,
 };
 
-/// A generic pipeline runner that executes a subsystem audit.
-/// Returns the validation results and the exact time it took to scan.
+/// A generic pipeline runner that executes a single subsystem audit phase.
+///
+/// This function acts as the orchestrator for the validation pipeline. It takes
+/// the raw scanning function and the validation closures as parameters, ensuring
+/// that hardware is only probed if the configuration blueprint actually requested it.
+///
+/// # Arguments
+/// * `should_run` - If `false`, skips the phase entirely (e.g., if the TOML had no USB rules).
+/// * `scan` - A closure that executes the OS-level hardware discovery.
+/// * `evaluate` - A closure that cross-references the scanned hardware with the TOML blueprint.
+/// * `print` - A closure that renders the final colorized output to the terminal.
+///
+/// # Returns
+/// A tuple containing the evaluated `ValidationResult`s and the exact `Duration`
+/// it took to perform the OS-level `scan` phase.
 fn run_audit_phase<Item>(
     should_run: bool,
     scan: impl FnOnce() -> anyhow::Result<Vec<Item>>,
@@ -45,23 +58,23 @@ fn run_audit_phase<Item>(
     about = "Tux Validation: Embedded Linux System Auditor"
 )]
 struct Args {
-    /// Path to the TOML configuration blueprint
+    /// Path to the TOML configuration blueprint (e.g., board_config.toml)
     #[arg(short, long)]
     config: String,
 
-    /// Path to output JUnit XML report
+    /// Path to output the CI-compatible JUnit XML report
     #[arg(short = 'x', long)]
     xml_report: Option<String>,
 
-    /// Print a summary of the XML report to the console
+    /// Print a high-level summary of the generated XML report to the console
     #[arg(long, requires = "xml_report")]
     xml_summary: bool,
 
-    /// Perform hardware probe for I2C (smbus_write_quick)
+    /// Perform live hardware probing for I2C (requires sudo and i2c-dev module)
     #[arg(long)]
     i2c_hw_probe: bool,
 
-    /// Print serial IDs (USB)
+    /// Include internal USB serial IDs in the terminal output
     #[arg(long)]
     usb_print_serial: bool,
 }
